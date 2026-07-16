@@ -69,6 +69,7 @@ func main() {
 - [docs/usage.md](docs/usage.md) — 完整用法
 - [docs/architecture.md](docs/architecture.md) — 架构设计
 - [docs/comparison.md](docs/comparison.md) — 与 OpenCC / zhconv-rs 等主流方案对比
+- [docs/media-saber-integration.md](docs/media-saber-integration.md) — Media Saber 后端接入设计
 - [docs/dict-sync.md](docs/dict-sync.md) — 词典同步与自动 PR
 - [docs/release.md](docs/release.md) — 发布流程
 - [examples/basic](examples/basic) — 可运行示例

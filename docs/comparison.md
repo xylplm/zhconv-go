@@ -204,6 +204,9 @@ flowchart TD
 | 未来扩展 ASS 安全层 | ✅ 库边界清晰 | 也可，但封装更厚 |
 | 做通用翻译式转换中台 | 不足 | 更合适 |
 
+与后端现有字幕状态机、`gojianfan` 分工、写路径接入点的详细方案见  
+**[media-saber-integration.md](media-saber-integration.md)**。
+
 ## 8. 诚实边界（避免过度承诺）
 
 `zhconv-go` **不是**下列替代品：
