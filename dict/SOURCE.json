@@ -1,0 +1,24 @@
+{
+  "repo": "BYVoid/OpenCC",
+  "ref": "master",
+  "commit": "e67b9969109b3d62b5447a1427ec5d0e5fba5a35",
+  "commit_url": "https://github.com/BYVoid/OpenCC/commit/e67b9969109b3d62b5447a1427ec5d0e5fba5a35",
+  "generated_at": "2026-07-16T10:54:10Z",
+  "files_sha256_prefix": {
+    "HKVariants.txt": "e5cd434530322458",
+    "TSCharacters.txt": "737c21c66f55a419",
+    "TSPhrases.txt": "362fa1b9a7d6edd0",
+    "TWPhrasesRev.txt": "4294bf38f28390ee",
+    "TWVariants.txt": "1413dc4de4884753"
+  },
+  "counts": {
+    "chars": 3231,
+    "phrases": 1073
+  },
+  "notes": [
+    "TSCharacters is the primary character map (first candidate kept).",
+    "TWVariants/HKVariants are reversed to cover regional glyphs; existing TSCharacters entries win.",
+    "TSPhrases then TWPhrasesRev; later phrase keys overwrite earlier ones.",
+    "Phrase targets may still contain traditional glyphs; runtime normalizes with the character map."
+  ]
+}

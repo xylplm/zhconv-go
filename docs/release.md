@@ -7,6 +7,7 @@
 | 工作流 | 触发 | 作用 |
 |---|---|---|
 | `CI` | push/PR 到 main | `go vet` + `go test` + demo/bench smoke |
+| `Dict Sync` | 每周一 / 手动 | 从 OpenCC 重生词表并自动开 PR（见 [dict-sync.md](dict-sync.md)） |
 | `Release` | 推送 `v*` tag | 多平台构建 + checksums + GitHub Release |
 
 ### 发布步骤

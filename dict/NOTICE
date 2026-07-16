@@ -7,3 +7,14 @@ Normalized sources:
 - TWVariants.txt / HKVariants.txt (regional glyphs reversed toward simplified)
 
 When an entry has multiple candidates, the first candidate is kept.
+
+Pinned upstream:
+- ref: master
+- commit: e67b9969109b3d62b5447a1427ec5d0e5fba5a35
+- commit_url: https://github.com/BYVoid/OpenCC/commit/e67b9969109b3d62b5447a1427ec5d0e5fba5a35
+- generated_at: 2026-07-16T10:54:10Z
+
+Regenerate with:
+  go run ./scripts/gendict
+  # or
+  ./scripts/sync-dict.sh

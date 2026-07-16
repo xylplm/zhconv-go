@@ -16,6 +16,16 @@
 词表来源于 [OpenCC](https://github.com/BYVoid/OpenCC)（Apache-2.0）：
 `TSCharacters` / `TSPhrases` / `TWPhrasesRev`，以及 `TWVariants` / `HKVariants` 的反向字形映射。
 
+词典可本地重生，也可由 Actions **每周自动开 PR** 同步上游：
+
+```bash
+make dict-sync
+# 或
+go run ./scripts/gendict
+```
+
+详见 [docs/dict-sync.md](docs/dict-sync.md)。
+
 > 说明：这是**单向繁转简**，不是完整 OpenCC/zhconv 多地区互转引擎。  
 > 地区支持体现在“台/港繁体写法也能落到大陆简体”，而不是 `zh-TW/zh-HK` 目标变体切换。
 
@@ -59,6 +69,7 @@ func main() {
 - [docs/usage.md](docs/usage.md) — 完整用法
 - [docs/architecture.md](docs/architecture.md) — 架构设计
 - [docs/comparison.md](docs/comparison.md) — 与 OpenCC / zhconv-rs 等主流方案对比
+- [docs/dict-sync.md](docs/dict-sync.md) — 词典同步与自动 PR
 - [docs/release.md](docs/release.md) — 发布流程
 - [examples/basic](examples/basic) — 可运行示例
 
