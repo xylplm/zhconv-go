@@ -1,0 +1,18 @@
+# Binaries
+/zhconv
+/zhconv.exe
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage.out
+coverage.html
