@@ -1,4 +1,5 @@
-# 推送 v* 标签自动发版；也可手动指定「已有标签」重跑/补发
+# 推送 v* 标签自动发版。
+# 手动：填写标签号；不存在则在所选分支 HEAD 创建并推送后再发版。
 name: 版本发布
 
 on:
@@ -8,12 +9,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "要发布的已有标签（必须已存在，如 v0.1.2）"
+        description: "发布标签（如 v0.1.2）；不存在则在当前所选分支 HEAD 上创建"
         required: true
         type: string
 
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -24,32 +25,64 @@ jobs:
     name: 构建并发布
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 手动创建标签推送会再触发一次 tag push；跳过 bot 推送，避免重复发版
+    if: github.event_name == 'workflow_dispatch' || github.actor != 'github-actions[bot]'
     steps:
-      - name: 解析版本号
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # 手动：Actions 界面所选分支；推送标签：该标签提交
+          # 默认行为已覆盖，显式写 token 以便后续 push 标签
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 解析并确保标签存在
         id: meta
         shell: bash
         run: |
+          set -euo pipefail
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             TAG="${{ inputs.tag }}"
           else
             TAG="${GITHUB_REF_NAME}"
           fi
           TAG="${TAG#refs/tags/}"
-          if [[ ! "$TAG" =~ ^v[0-9] ]]; then
-            echo "标签格式应为 v 开头的语义化版本，例如 v0.1.2，当前: $TAG"
+          TAG="$(echo -n "$TAG" | tr -d '[:space:]')"
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "标签格式应为语义化版本，例如 v0.1.2 / v0.2.0-rc.1，当前: ${TAG}"
             exit 1
           fi
+
           VERSION="${TAG#v}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "发布标签: ${TAG}"
 
-      - name: 检出代码
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          # 手动触发时检出指定标签，避免误用 main 上未打 tag 的代码
-          ref: ${{ steps.meta.outputs.tag }}
+          git fetch --tags --force origin
+
+          if git rev-parse "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "标签已存在: ${TAG} -> $(git rev-parse "refs/tags/${TAG}")"
+            # 手动触发且标签已存在：切到该标签提交构建，避免误用分支最新提交
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              git checkout -q "refs/tags/${TAG}"
+              echo "已切换到既有标签 ${TAG}"
+            fi
+          else
+            if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+              echo "收到 tag push 但找不到标签 ${TAG}"
+              exit 1
+            fi
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "${TAG}" -m "Release ${TAG}"
+            git push origin "refs/tags/${TAG}"
+            echo "created=true" >> "$GITHUB_OUTPUT"
+            echo "已在 $(git rev-parse --short HEAD) 创建并推送标签 ${TAG}"
+          fi
+
+          echo "发布标签: ${TAG} (version=${VERSION})"
 
       - name: 安装 Go
         uses: actions/setup-go@v5
