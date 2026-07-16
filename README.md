@@ -54,11 +54,13 @@ func main() {
 }
 ```
 
-更多示例见：
+更多文档与示例：
 
-- [docs/usage.md](docs/usage.md)
-- [docs/architecture.md](docs/architecture.md)
-- [examples/basic](examples/basic)
+- [docs/usage.md](docs/usage.md) — 完整用法
+- [docs/architecture.md](docs/architecture.md) — 架构设计
+- [docs/comparison.md](docs/comparison.md) — 与 OpenCC / zhconv-rs 等主流方案对比
+- [docs/release.md](docs/release.md) — 发布流程
+- [examples/basic](examples/basic) — 可运行示例
 
 ## 库 API
 
@@ -122,6 +124,16 @@ go run ./cmd/zhconv -demo
 | 港台异体字（裏/裡、啓/啟、綫/線…） | ✅ 字符变体反向 |
 | `zh-TW`/`zh-HK` 作为输出目标 | ❌ 不做（只输出简体） |
 | 简体 → 繁体 | ❌ 不做 |
+
+## 与主流方案怎么选
+
+| 你的目标 | 更合适 |
+|---|---|
+| Go 项目里只要繁→简，轻量可嵌入 | **zhconv-go** |
+| 完整双向/多地区配置（s2t、t2tw、s2hk…） | OpenCC / zhconv-rs |
+| Go 里要较完整 OpenCC 能力 | `longbridgeapp/opencc` 等 |
+
+多维度对比图与详细表格见：**[docs/comparison.md](docs/comparison.md)**。
 
 ## 设计摘要
 

@@ -9,6 +9,8 @@
 - 纯 Go，零 CGO
 - API 极简，适合被其他项目 `go get`
 
+与 OpenCC / zhconv-rs 等主流方案的定位差异见 [comparison.md](comparison.md)。
+
 ## 包结构
 
 ```text
