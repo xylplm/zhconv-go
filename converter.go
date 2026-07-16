@@ -6,11 +6,12 @@ import (
 	"github.com/xylplm/zhconv-go/table"
 )
 
-// phrase is one traditional phrase rule, pre-tokenized for fast matching.
+// phrase is one traditional phrase rule.
+// Matching uses exact UTF-8 substring equality (zero temp buffers).
 type phrase struct {
-	from  []rune
-	to    string
-	bytes int // UTF-8 byte length of the traditional form
+	from   string // traditional form (UTF-8)
+	to     string // simplified form (already char-normalized)
+	nRunes int    // rune count; buckets sorted longest-first
 }
 
 // Converter performs traditional-to-simplified Chinese conversion.
@@ -34,8 +35,10 @@ type Converter struct {
 // Options controls converter construction.
 type Options struct {
 	// Chars overrides the embedded character table when non-nil.
+	// The slice is treated as read-only.
 	Chars []table.Mapping
 	// Phrases overrides the embedded phrase table when non-nil.
+	// The slice is treated as read-only.
 	Phrases []table.Mapping
 	// DisablePhrases skips phrase matching and only applies character mapping.
 	DisablePhrases bool
@@ -70,8 +73,15 @@ func New(opts Options) (*Converter, error) {
 
 	pendingMulti := make([]table.Mapping, 0)
 	for _, m := range chars {
+		if m.From == "" || m.To == "" || m.From == m.To {
+			continue
+		}
+		if !utf8.ValidString(m.From) || !utf8.ValidString(m.To) {
+			continue
+		}
 		r, size := utf8.DecodeRuneInString(m.From)
-		if r == utf8.RuneError && size == 1 {
+		// Skip empty / invalid leading rune (size==0 or lone invalid byte).
+		if size == 0 || (r == utf8.RuneError && size == 1) {
 			continue
 		}
 		// Multi-rune sources belong in the phrase table.
@@ -96,7 +106,16 @@ func New(opts Options) (*Converter, error) {
 	allPhrases := make([]table.Mapping, 0, len(phrases)+len(pendingMulti))
 	allPhrases = append(allPhrases, phrases...)
 	allPhrases = append(allPhrases, pendingMulti...)
+	if len(allPhrases) > 0 {
+		c.phrases = make(map[rune][]phrase, len(allPhrases)/2+1)
+	}
 	for _, m := range allPhrases {
+		if m.From == "" || m.To == "" {
+			continue
+		}
+		if !utf8.ValidString(m.From) || !utf8.ValidString(m.To) {
+			continue
+		}
 		to := c.simplifyWithChars(m.To)
 		c.addPhrase(m.From, to)
 	}
@@ -115,13 +134,14 @@ func (c *Converter) addPhrase(from, to string) {
 	if c == nil || from == "" || to == "" || from == to {
 		return
 	}
-	runes := []rune(from)
-	if len(runes) == 0 {
+	r, size := utf8.DecodeRuneInString(from)
+	if size == 0 || (r == utf8.RuneError && size == 1) {
 		return
 	}
+	nRunes := utf8.RuneCountInString(from)
+
 	// Single-rune "phrase" can live in the char maps if missing.
-	if len(runes) == 1 {
-		r := runes[0]
+	if nRunes == 1 {
 		if _, ok := c.char1[r]; ok {
 			return
 		}
@@ -143,11 +163,10 @@ func (c *Converter) addPhrase(from, to string) {
 	if c.phrases == nil {
 		c.phrases = make(map[rune][]phrase)
 	}
-	start := runes[0]
-	c.phrases[start] = append(c.phrases[start], phrase{
-		from:  runes,
-		to:    to,
-		bytes: len(from),
+	c.phrases[r] = append(c.phrases[r], phrase{
+		from:   from,
+		to:     to,
+		nRunes: nRunes,
 	})
 	c.hasPhrase = true
 }
@@ -158,23 +177,22 @@ func (c *Converter) finalizePhrases() {
 		return
 	}
 	for k, list := range c.phrases {
-		// Insertion-sort by rune length desc (lists are small).
+		// Insertion-sort by rune length desc (bucket lists are small).
 		for i := 1; i < len(list); i++ {
 			j := i
-			for j > 0 && len(list[j-1].from) < len(list[j].from) {
+			for j > 0 && list[j-1].nRunes < list[j].nRunes {
 				list[j-1], list[j] = list[j], list[j-1]
 				j--
 			}
 		}
-		// First mapping wins for equal-length duplicates.
+		// First mapping wins for equal-length / identical sources.
 		dedup := list[:0]
 		seen := make(map[string]struct{}, len(list))
 		for _, p := range list {
-			key := string(p.from)
-			if _, ok := seen[key]; ok {
+			if _, ok := seen[p.from]; ok {
 				continue
 			}
-			seen[key] = struct{}{}
+			seen[p.from] = struct{}{}
 			dedup = append(dedup, p)
 		}
 		c.phrases[k] = dedup
@@ -197,27 +215,38 @@ func (c *Converter) mapChars(s string) (string, bool) {
 	if len(c.char1) == 0 && len(c.charN) == 0 {
 		return s, false
 	}
-	buf := make([]byte, 0, len(s))
-	changed := false
+	// Lazy builder: only allocate on first replacement (load-time helper).
+	var buf []byte
+	started := false
 	for i := 0; i < len(s); {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if r == utf8.RuneError && size == 1 {
-			buf = append(buf, s[i])
+			if started {
+				buf = append(buf, s[i])
+			}
 			i++
 			continue
 		}
 		if repl, ok := c.char1[r]; ok {
+			if !started {
+				buf = make([]byte, 0, len(s))
+				buf = append(buf, s[:i]...)
+				started = true
+			}
 			buf = utf8.AppendRune(buf, repl)
-			changed = true
 		} else if repl, ok := c.charN[r]; ok {
+			if !started {
+				buf = make([]byte, 0, len(s))
+				buf = append(buf, s[:i]...)
+				started = true
+			}
 			buf = append(buf, repl...)
-			changed = true
-		} else {
+		} else if started {
 			buf = append(buf, s[i:i+size]...)
 		}
 		i += size
 	}
-	if !changed {
+	if !started {
 		return s, false
 	}
 	return string(buf), true
@@ -236,6 +265,15 @@ func (c *Converter) Convert(s string) string {
 	started := false
 	i := 0
 	for i < len(s) {
+		// Fast path: ASCII never participates in t2s tables.
+		if b := s[i]; b < 0x80 {
+			if started {
+				buf = append(buf, b)
+			}
+			i++
+			continue
+		}
+
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if r == utf8.RuneError && size == 1 {
 			if started {
@@ -249,7 +287,8 @@ func (c *Converter) Convert(s string) string {
 		if c.hasPhrase {
 			if to, nBytes := c.matchPhraseAt(s, i, r); nBytes > 0 {
 				if !started {
-					buf = make([]byte, 0, len(s))
+					// Small headroom for rare multi-rune char expansions later.
+					buf = make([]byte, 0, len(s)+8)
 					buf = append(buf, s[:i]...)
 					started = true
 				}
@@ -262,7 +301,7 @@ func (c *Converter) Convert(s string) string {
 		// 2) Single-rune character map.
 		if repl, ok := c.char1[r]; ok {
 			if !started {
-				buf = make([]byte, 0, len(s))
+				buf = make([]byte, 0, len(s)+8)
 				buf = append(buf, s[:i]...)
 				started = true
 			}
@@ -270,15 +309,17 @@ func (c *Converter) Convert(s string) string {
 			i += size
 			continue
 		}
-		if repl, ok := c.charN[r]; ok {
-			if !started {
-				buf = make([]byte, 0, len(s))
-				buf = append(buf, s[:i]...)
-				started = true
+		if len(c.charN) > 0 {
+			if repl, ok := c.charN[r]; ok {
+				if !started {
+					buf = make([]byte, 0, len(s)+8)
+					buf = append(buf, s[:i]...)
+					started = true
+				}
+				buf = append(buf, repl...)
+				i += size
+				continue
 			}
-			buf = append(buf, repl...)
-			i += size
-			continue
 		}
 
 		// 3) Keep original.
@@ -294,51 +335,39 @@ func (c *Converter) Convert(s string) string {
 }
 
 // matchPhraseAt returns replacement and matched traditional byte length.
-// Zero-allocation: compares candidate runes directly against s without a temp buffer.
+// Candidates are exact UTF-8 substring compares; first hit is longest.
 func (c *Converter) matchPhraseAt(s string, byteIndex int, first rune) (string, int) {
 	list := c.phrases[first]
 	if len(list) == 0 {
 		return "", 0
 	}
-	// list is sorted longest-first; first hit is maximal.
+	remain := len(s) - byteIndex
 	for _, p := range list {
-		// Remaining input must hold at least the phrase byte length.
-		if byteIndex+p.bytes > len(s) {
+		n := len(p.from)
+		if n > remain {
 			continue
 		}
-		// First rune already matched via bucket key.
-		j := byteIndex + utf8.RuneLen(first)
-		ok := true
-		for k := 1; k < len(p.from); k++ {
-			if j >= len(s) {
-				ok = false
-				break
-			}
-			rr, sz := utf8.DecodeRuneInString(s[j:])
-			if rr != p.from[k] {
-				ok = false
-				break
-			}
-			j += sz
-		}
-		if ok {
-			return p.to, p.bytes
+		// Full substring equality (includes the already-bucketed first rune).
+		if s[byteIndex:byteIndex+n] == p.from {
+			return p.to, n
 		}
 	}
 	return "", 0
 }
 
 // ConvertBytes converts traditional Chinese bytes to simplified Chinese.
-// When no change is required, the input slice is returned as-is.
+// When no change is required, the input slice is returned as-is (no allocation).
+// p must not be mutated during the call.
 func (c *Converter) ConvertBytes(p []byte) []byte {
 	if c == nil || len(p) == 0 {
 		return p
 	}
-	s := string(p)
+	// Read-only string view over p; Convert never mutates the input.
+	s := bytesToStringRO(p)
 	out := c.Convert(s)
-	// Convert returns s when unchanged; keep the caller's slice to avoid a copy.
+	// Unchanged path returns the original string header from Convert.
 	if out == s {
 		return p
 	}
-	return []byte(out)
+	return stringToBytesCopy(out)
 }

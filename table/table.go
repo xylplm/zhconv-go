@@ -47,15 +47,18 @@ func LoadTSV(data []byte) ([]Mapping, error) {
 		}
 		from := string(bytes.TrimSpace(trim[:tab]))
 		toRaw := bytes.TrimSpace(trim[tab+1:])
-		if len(toRaw) == 0 {
-			return nil, fmt.Errorf("table: line %d: empty target", lineNo)
+		if len(from) == 0 || len(toRaw) == 0 {
+			return nil, fmt.Errorf("table: line %d: empty field", lineNo)
 		}
 		// OpenCC multi-candidate: keep first token.
 		if sp := bytes.IndexByte(toRaw, ' '); sp >= 0 {
 			toRaw = toRaw[:sp]
 		}
+		if len(toRaw) == 0 {
+			return nil, fmt.Errorf("table: line %d: empty target", lineNo)
+		}
 		to := string(toRaw)
-		if from == "" || from == to {
+		if from == to {
 			continue
 		}
 		if !utf8.ValidString(from) || !utf8.ValidString(to) {

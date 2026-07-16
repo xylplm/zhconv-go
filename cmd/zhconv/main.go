@@ -42,16 +42,17 @@ func main() {
 		fail(err)
 	}
 
-	outText := zhconv.ToSimplified(string(data))
+	// ConvertBytes keeps the no-change path allocation-free for pure ASCII/simplified input.
+	outBytes := zhconv.ToSimplifiedBytes(data)
 
 	if *outPath == "" {
-		_, _ = os.Stdout.WriteString(outText)
-		if !strings.HasSuffix(outText, "\n") && len(outText) > 0 {
-			_, _ = os.Stdout.WriteString("\n")
+		_, _ = os.Stdout.Write(outBytes)
+		if len(outBytes) > 0 && outBytes[len(outBytes)-1] != '\n' {
+			_, _ = os.Stdout.Write([]byte{'\n'})
 		}
 		return
 	}
-	if err := os.WriteFile(*outPath, []byte(outText), 0o644); err != nil {
+	if err := os.WriteFile(*outPath, outBytes, 0o644); err != nil {
 		fail(err)
 	}
 }

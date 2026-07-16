@@ -51,12 +51,22 @@ jobs:
         env:
           OPENCC_REF: ${{ steps.ref.outputs.value }}
         run: |
-          go run ./scripts/gendict -ref "$OPENCC_REF" -out-root .
+          go run ./scripts/gendict -ref "$OPENCC_REF" -out-root . -retries 4
           test -f dict/SOURCE.json
           test -f dict/chars.tsv
           test -f dict/phrases.tsv
           cmp -s dict/chars.tsv table/chars.tsv
           cmp -s dict/phrases.tsv table/phrases.tsv
+          # Soft floor: refuse empty/truncated tables even if gendict were bypassed.
+          python3 - <<'PY'
+          import json
+          meta = json.load(open("dict/SOURCE.json"))
+          chars = meta["counts"]["chars"]
+          phrases = meta["counts"]["phrases"]
+          assert chars >= 1000, chars
+          assert phrases >= 200, phrases
+          print(f"counts ok: chars={chars} phrases={phrases}")
+          PY
 
       - name: Detect changes
         id: changes

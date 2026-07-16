@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/xylplm/zhconv-go/table"
 )
 
 func TestToSimplifiedCommonPhrases(t *testing.T) {
@@ -158,6 +160,84 @@ func TestConvertBytesNoChangeReturnsSameSlice(t *testing.T) {
 	got := ToSimplifiedBytes(in)
 	if &got[0] != &in[0] {
 		t.Fatal("no-op ConvertBytes should return the input slice")
+	}
+}
+
+func TestConvertBytesEmpty(t *testing.T) {
+	if got := ToSimplifiedBytes(nil); got != nil {
+		t.Fatalf("nil input => %v", got)
+	}
+	in := []byte{}
+	got := ToSimplifiedBytes(in)
+	if len(got) != 0 {
+		t.Fatalf("empty input len=%d", len(got))
+	}
+}
+
+func TestCustomTables(t *testing.T) {
+	c, err := New(Options{
+		Chars: []table.Mapping{
+			{From: "測", To: "测"},
+			{From: "試", To: "试"},
+			{From: "組", To: "组"},
+			{From: "", To: "x"},                       // ignored
+			{From: "坏", To: "坏"},                     // noop ignored
+			{From: string([]byte{0xff}), To: "x"},     // invalid ignored
+		},
+		Phrases: []table.Mapping{
+			{From: "測試詞", To: "测试词"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Convert("測試詞"); got != "测试词" {
+		t.Fatalf("custom phrase: %q", got)
+	}
+	if got := c.Convert("測試"); got != "测试" {
+		t.Fatalf("custom chars: %q", got)
+	}
+	if got := c.Convert("測試詞組"); got != "测试词组" {
+		t.Fatalf("phrase then char: %q", got)
+	}
+}
+
+func TestMatchLongestPhraseOverShorter(t *testing.T) {
+	c, err := New(Options{
+		Chars: []table.Mapping{}, // no embedded fallbacks
+		Phrases: []table.Mapping{
+			{From: "軟體", To: "软件"},
+			{From: "軟體工程", To: "软件工程"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Convert("軟體工程師"); got != "软件工程师" && got != "软件工程師" {
+		// 師 may stay traditional without char map; longest phrase must still win prefix.
+		if !strings.HasPrefix(got, "软件工程") {
+			t.Fatalf("longest phrase expected, got %q", got)
+		}
+	}
+	if got := c.Convert("軟體工程"); got != "软件工程" {
+		t.Fatalf("exact longest phrase: %q", got)
+	}
+	if got := c.Convert("軟體"); got != "软件" {
+		t.Fatalf("shorter phrase: %q", got)
+	}
+}
+
+func TestIdentityFallbackNeverNils(t *testing.T) {
+	c := identity()
+	if c == nil {
+		t.Fatal("identity nil")
+	}
+	if got := c.Convert("軟體"); got != "軟體" {
+		t.Fatalf("identity should no-op, got %q", got)
+	}
+	in := []byte("abc")
+	if got := c.ConvertBytes(in); &got[0] != &in[0] {
+		t.Fatal("identity ConvertBytes should return input")
 	}
 }
 

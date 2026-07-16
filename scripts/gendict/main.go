@@ -31,6 +31,10 @@ const (
 	defaultRepo = "BYVoid/OpenCC"
 	defaultRef  = "master"
 	userAgent   = "zhconv-go-gendict/1.0 (+https://github.com/xylplm/zhconv-go)"
+
+	// Soft floor against accidental empty / truncated upstream dumps.
+	minChars   = 1000
+	minPhrases = 200
 )
 
 // Upstream OpenCC dictionary paths used to build unidirectional t2s tables.
@@ -69,7 +73,8 @@ func run() error {
 	refFlag := flag.String("ref", "", "OpenCC git ref (tag/branch/sha); default OPENCC_REF or master")
 	repo := flag.String("repo", defaultRepo, "OpenCC GitHub repo owner/name")
 	outRoot := flag.String("out-root", ".", "repository root to write dict/ and table/")
-	timeout := flag.Duration("timeout", 60*time.Second, "HTTP timeout for each file")
+	timeout := flag.Duration("timeout", 60*time.Second, "HTTP timeout for each request")
+	retries := flag.Int("retries", 3, "HTTP retries for transient failures")
 	flag.Parse()
 
 	ref := strings.TrimSpace(*refFlag)
@@ -79,9 +84,12 @@ func run() error {
 	if ref == "" {
 		ref = defaultRef
 	}
+	if *retries < 1 {
+		*retries = 1
+	}
 
 	client := &http.Client{Timeout: *timeout}
-	commit, err := resolveCommit(client, *repo, ref)
+	commit, err := resolveCommit(client, *repo, ref, *retries)
 	if err != nil {
 		return err
 	}
@@ -90,7 +98,7 @@ func run() error {
 	raw := make(map[string][]byte, len(sourceFiles))
 	filePrefix := make(map[string]string, len(sourceFiles))
 	for _, path := range sourceFiles {
-		body, err := fetchRaw(client, *repo, commit, path)
+		body, err := fetchRaw(client, *repo, commit, path, *retries)
 		if err != nil {
 			return err
 		}
@@ -102,6 +110,12 @@ func run() error {
 	chars, phrases, err := buildTables(raw)
 	if err != nil {
 		return err
+	}
+	if len(chars) < minChars {
+		return fmt.Errorf("chars too few: %d (min %d); abort to avoid bad publish", len(chars), minChars)
+	}
+	if len(phrases) < minPhrases {
+		return fmt.Errorf("phrases too few: %d (min %d); abort to avoid bad publish", len(phrases), minPhrases)
 	}
 	fmt.Printf("  generated chars=%d phrases=%d\n", len(chars), len(phrases))
 
@@ -123,10 +137,10 @@ func run() error {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dir, "chars.tsv"), charTSV, 0o644); err != nil {
+		if err := atomicWriteFile(filepath.Join(dir, "chars.tsv"), charTSV, 0o644); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dir, "phrases.tsv"), phraseTSV, 0o644); err != nil {
+		if err := atomicWriteFile(filepath.Join(dir, "phrases.tsv"), phraseTSV, 0o644); err != nil {
 			return err
 		}
 	}
@@ -154,6 +168,21 @@ func run() error {
 	}
 	if err := writeNOTICE(filepath.Join(*outRoot, "dict", "NOTICE"), meta); err != nil {
 		return err
+	}
+
+	// Parity check before declaring success.
+	for _, name := range []string{"chars.tsv", "phrases.tsv"} {
+		a, err := os.ReadFile(filepath.Join(*outRoot, "dict", name))
+		if err != nil {
+			return err
+		}
+		b, err := os.ReadFile(filepath.Join(*outRoot, "table", name))
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(a, b) {
+			return fmt.Errorf("dict/%s and table/%s diverge after write", name, name)
+		}
 	}
 
 	fmt.Println("wrote dict/ and table/ characters + phrases")
@@ -186,7 +215,6 @@ func buildTables(raw map[string][]byte) (chars, phrases []mapping, err error) {
 	charMap := make(map[string]string, len(tsChars)+256)
 	for _, m := range tsChars {
 		if !isSingleRune(m.from) {
-			// Multi-rune sources belong with phrases.
 			continue
 		}
 		if m.from == m.to {
@@ -232,7 +260,6 @@ func buildTables(raw map[string][]byte) (chars, phrases []mapping, err error) {
 func applyReversedVariants(charMap map[string]string, variants []mapping) {
 	for _, m := range variants {
 		base := m.from
-		// m.to may still be multi-candidate joined? parseOpenCCDict keeps first only.
 		regional := m.to
 		if !isSingleRune(base) || !isSingleRune(regional) {
 			continue
@@ -269,7 +296,6 @@ func parseOpenCCDict(data []byte) ([]mapping, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		// Drop trailing inline notes rarely present after values.
 		tab := strings.IndexByte(line, '\t')
 		if tab < 0 {
 			return nil, fmt.Errorf("line %d: missing tab", lineNo)
@@ -314,6 +340,8 @@ func mapToSorted(m map[string]string) []mapping {
 
 func renderTSV(header []string, ms []mapping) []byte {
 	var b strings.Builder
+	// Rough pre-size: headers + ~8 bytes per entry average lower bound.
+	b.Grow(len(header)*64 + len(ms)*12)
 	for _, h := range header {
 		b.WriteString(h)
 		b.WriteByte('\n')
@@ -335,23 +363,11 @@ func isSingleRune(s string) bool {
 	return size == len(s) && size > 0
 }
 
-func resolveCommit(client *http.Client, repo, ref string) (string, error) {
-	// Commits API accepts branch names, tags, and full/short SHAs.
+func resolveCommit(client *http.Client, repo, ref string, retries int) (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, ref)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	body, err := httpGet(client, url, "application/vnd.github+json", retries)
 	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("resolve commit %s@%s: HTTP %d: %s", repo, ref, resp.StatusCode, truncate(string(body), 200))
+		return "", fmt.Errorf("resolve commit %s@%s: %w", repo, ref, err)
 	}
 	var payload struct {
 		SHA string `json:"sha"`
@@ -365,29 +381,93 @@ func resolveCommit(client *http.Client, repo, ref string) (string, error) {
 	return payload.SHA, nil
 }
 
-func fetchRaw(client *http.Client, repo, commit, path string) ([]byte, error) {
+func fetchRaw(client *http.Client, repo, commit, path string, retries int) ([]byte, error) {
 	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s", repo, commit, path)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	body, err := httpGet(client, url, "", retries)
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", userAgent)
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch %s: HTTP %d", path, resp.StatusCode)
+		return nil, fmt.Errorf("fetch %s: %w", path, err)
 	}
 	if len(body) == 0 {
 		return nil, fmt.Errorf("fetch %s: empty body", path)
 	}
 	return body, nil
+}
+
+func httpGet(client *http.Client, url, accept string, retries int) ([]byte, error) {
+	var last error
+	for attempt := 1; attempt <= retries; attempt++ {
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", userAgent)
+		if accept != "" {
+			req.Header.Set("Accept", accept)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			last = err
+			sleepBackoff(attempt)
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+		_ = resp.Body.Close()
+		if readErr != nil {
+			last = readErr
+			sleepBackoff(attempt)
+			continue
+		}
+		// Retry rate-limit / transient 5xx.
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
+			last = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+			sleepBackoff(attempt)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
+		}
+		return body, nil
+	}
+	if last == nil {
+		last = fmt.Errorf("exhausted %d retries", retries)
+	}
+	return nil, last
+}
+
+func sleepBackoff(attempt int) {
+	// 200ms, 400ms, 800ms... capped roughly by attempt count.
+	d := time.Duration(200*(1<<(attempt-1))) * time.Millisecond
+	if d > 2*time.Second {
+		d = 2 * time.Second
+	}
+	time.Sleep(d)
+}
+
+func atomicWriteFile(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	// Ensure cleanup on any failure path.
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	return nil
 }
 
 func writeJSON(path string, v any) error {
@@ -396,7 +476,7 @@ func writeJSON(path string, v any) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o644)
+	return atomicWriteFile(path, data, 0o644)
 }
 
 func writeNOTICE(path string, meta sourceMeta) error {
@@ -421,7 +501,7 @@ Regenerate with:
   # or
   ./scripts/sync-dict.sh
 `, meta.Repo, meta.Ref, meta.Commit, meta.CommitURL, meta.GeneratedAt)
-	return os.WriteFile(path, []byte(content), 0o644)
+	return atomicWriteFile(path, []byte(content), 0o644)
 }
 
 func shortSHA(sha string) string {

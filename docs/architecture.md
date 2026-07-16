@@ -29,12 +29,23 @@ zhconv-go/
   .github/workflows/ # CI / Release
 ```
 
+## 热路径设计要点
+
+- **ASCII 快路径**：`<0x80` 字节直接跳过查表（字幕混排极常见）
+- **无变更 0 alloc**：首次替换前不分配；整段无命中直接返回原 string
+- **词组匹配**：按首 rune 分桶 + 最长优先；UTF-8 子串整段比较（无临时 rune 缓冲）
+- **字符表**：`map[rune]rune` 1:1 热路径；极少数多码点目标进 `charN`
+- **词表加载缓存**：`table.DefaultChars/Phrases` 进程内 `sync.Once`
+- **ConvertBytes**：无变更返回原 slice；有变更才分配（unsafe 只读视图）
+
 ## 转换流水线
 
 ```text
 input string
   │
-  ├─ phrase trie longest match  ──命中──► write simplified phrase
+  ├─ ASCII byte  ──直接保留──►
+  │
+  ├─ phrase bucket longest match  ──命中──► write simplified phrase
   │
   └─ miss
        │

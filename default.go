@@ -8,16 +8,15 @@ var (
 )
 
 // identity returns an empty converter that leaves text unchanged.
+// All maps stay nil; Convert/ConvertBytes treat nil maps as empty.
 func identity() *Converter {
-	return &Converter{
-		char1: make(map[rune]rune),
-	}
+	return &Converter{}
 }
 
 func defaultConverter() *Converter {
 	defaultOnce.Do(func() {
 		c, err := New(Options{})
-		if err != nil {
+		if err != nil || c == nil {
 			// Embedded dictionaries are validated by tests. Fall back to a safe
 			// no-op converter instead of panicking in production call paths.
 			defaultConv = identity()
@@ -25,6 +24,10 @@ func defaultConverter() *Converter {
 		}
 		defaultConv = c
 	})
+	// Defensive: Once should always assign, but never hand a nil pointer to callers.
+	if defaultConv == nil {
+		return identity()
+	}
 	return defaultConv
 }
 
