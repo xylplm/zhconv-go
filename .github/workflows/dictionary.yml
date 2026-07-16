@@ -1,8 +1,9 @@
-name: Dict Sync
+# 词典同步：定期从 OpenCC 重生词表，有变更则开 PR
+name: Dictionary
 
 on:
   schedule:
-    # 每周一 03:17 UTC，避开整点高峰
+    # 每周一 03:17 UTC
     - cron: "17 3 * * 1"
   workflow_dispatch:
     inputs:
@@ -12,17 +13,17 @@ on:
         default: "master"
         type: string
 
+concurrency:
+  group: dictionary-sync
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
 
-concurrency:
-  group: dict-sync
-  cancel-in-progress: false
-
 jobs:
   sync:
-    name: Sync OpenCC dictionaries
+    name: Sync
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -57,7 +58,6 @@ jobs:
           test -f dict/phrases.tsv
           cmp -s dict/chars.tsv table/chars.tsv
           cmp -s dict/phrases.tsv table/phrases.tsv
-          # Soft floor: refuse empty/truncated tables even if gendict were bypassed.
           python3 - <<'PY'
           import json
           meta = json.load(open("dict/SOURCE.json"))
@@ -71,8 +71,7 @@ jobs:
       - name: Detect changes
         id: changes
         run: |
-          # Only TSV mapping files decide whether a PR is needed.
-          # SOURCE.json/NOTICE are written only when TSV content changes (gendict).
+          # 仅以 TSV 映射判断是否需要 PR（SOURCE.json 仅在内容变化时更新）
           if git diff --quiet -- \
               dict/chars.tsv dict/phrases.tsv \
               table/chars.tsv table/phrases.tsv; then
@@ -85,7 +84,7 @@ jobs:
             git diff --stat -- dict table
           fi
 
-      - name: Run tests against regenerated tables
+      - name: Test regenerated tables
         if: steps.changes.outputs.changed == 'true'
         run: |
           go vet ./...
@@ -109,35 +108,35 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           cat > /tmp/pr-body.md <<EOF
-## 自动词典同步
+          ## 自动词典同步
 
-从 [OpenCC](https://github.com/BYVoid/OpenCC) 重新生成单向 t2s 词表。
+          从 [OpenCC](https://github.com/BYVoid/OpenCC) 重新生成单向 t2s 词表。
 
-| 项 | 值 |
-|---|---|
-| OpenCC ref | \`${REF}\` |
-| OpenCC commit | [\`${SHORT}\`](https://github.com/BYVoid/OpenCC/commit/${COMMIT}) |
-| 生成时间 (UTC) | \`${GEN_AT}\` |
-| 规模 | \`${COUNTS}\` |
+          | 项 | 值 |
+          |---|---|
+          | OpenCC ref | \`${REF}\` |
+          | OpenCC commit | [\`${SHORT}\`](https://github.com/BYVoid/OpenCC/commit/${COMMIT}) |
+          | 生成时间 (UTC) | \`${GEN_AT}\` |
+          | 规模 | \`${COUNTS}\` |
 
-### 变更范围
-- \`dict/chars.tsv\` / \`dict/phrases.tsv\`
-- \`table/chars.tsv\` / \`table/phrases.tsv\`（嵌入副本）
-- \`dict/SOURCE.json\` / \`dict/NOTICE\`
+          ### 变更范围
+          - \`dict/chars.tsv\` / \`dict/phrases.tsv\`
+          - \`table/chars.tsv\` / \`table/phrases.tsv\`（嵌入副本）
+          - \`dict/SOURCE.json\` / \`dict/NOTICE\`
 
-### 校验
-- \`go vet ./...\`
-- \`go test ./... -count=1\`
-- \`dict/*\` 与 \`table/*\` 内容一致
+          ### 校验
+          - \`go vet ./...\`
+          - \`go test ./... -count=1\`
+          - \`dict/*\` 与 \`table/*\` 内容一致
 
-### 说明
-- 仅做 **繁→简** 词表维护，不引入双向/多地区输出配置
-- 多候选词条保留第一候选
-- 台/港异体字以 reverse variants 补洞，不覆盖 \`TSCharacters\`
-- 请人工扫一眼 diff 后合并；合并后如需发版再打 tag
+          ### 说明
+          - 仅做 **繁→简** 词表维护，不引入双向/多地区输出配置
+          - 多候选词条保留第一候选
+          - 台/港异体字以 reverse variants 补洞，不覆盖 \`TSCharacters\`
+          - 请人工扫一眼 diff 后合并；合并后如需发版再打 tag
 
-> 由 \`Dict Sync\` workflow 创建，可手动 \`workflow_dispatch\` 重跑。
-EOF
+          > 由 **Dictionary** workflow 创建，可手动 Run workflow 重跑。
+          EOF
 
       - name: Create or update Pull Request
         if: steps.changes.outputs.changed == 'true'
@@ -148,7 +147,7 @@ EOF
             chore 🔧: 同步 OpenCC 词典 ${{ steps.body.outputs.short }}
 
             来源: BYVoid/OpenCC@${{ steps.body.outputs.commit }}
-          branch: chore/dict-sync
+          branch: chore/dictionary-sync
           delete-branch: true
           title: ${{ steps.body.outputs.title }}
           body-path: /tmp/pr-body.md

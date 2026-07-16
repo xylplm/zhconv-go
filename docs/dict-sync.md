@@ -40,7 +40,8 @@ table/phrases.tsv
 
 ## GitHub Actions 自动 PR
 
-工作流：`.github/workflows/dict-sync.yml`
+工作流：`.github/workflows/dictionary.yml`  
+Actions 列表显示名：**Dictionary**
 
 | 触发 | 行为 |
 |---|---|
@@ -49,14 +50,14 @@ table/phrases.tsv
 
 PR 特性：
 
-- 固定分支：`chore/dict-sync`（有更新则刷新同一 PR）
+- 固定分支：`chore/dictionary-sync`（有更新则刷新同一 PR）
 - 标题：`chore 🔧: 同步 OpenCC 词典 <short-sha>`
 - 合并前已跑 `go vet` + `go test`
 - 仅提交 `dict/**` 与 `table/*.tsv`
 
 ### 手动触发
 
-GitHub → Actions → **Dict Sync** → Run workflow
+GitHub → Actions → **Dictionary** → Run workflow
 
 ### 权限说明
 

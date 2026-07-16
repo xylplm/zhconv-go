@@ -1,3 +1,4 @@
+# 持续集成：代码检查与测试
 name: CI
 
 on:
@@ -6,13 +7,18 @@ on:
   pull_request:
     branches: [main, master]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   test:
-    name: Test (Go ${{ matrix.go }})
+    name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -33,7 +39,7 @@ jobs:
       - name: Test
         run: go test ./... -count=1
 
-      - name: Example build
+      - name: Build CLI demo
         run: |
           go build -o /tmp/zhconv ./cmd/zhconv
           /tmp/zhconv -demo

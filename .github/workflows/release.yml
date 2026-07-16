@@ -1,3 +1,4 @@
+# 发版：打 v* tag 后构建多平台 CLI 并创建 GitHub Release
 name: Release
 
 on:
@@ -5,13 +6,18 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and publish
+  publish:
+    name: Publish
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,7 +57,6 @@ jobs:
         run: |
           set -euo pipefail
           rm -f checksums.txt
-          # sha256sum is available on ubuntu runners
           sha256sum * > checksums.txt
           cat checksums.txt
 

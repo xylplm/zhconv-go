@@ -4,6 +4,7 @@
 
 [![CI](https://github.com/xylplm/zhconv-go/actions/workflows/ci.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/ci.yml)
 [![Release](https://github.com/xylplm/zhconv-go/actions/workflows/release.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/release.yml)
+[![Dictionary](https://github.com/xylplm/zhconv-go/actions/workflows/dictionary.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/dictionary.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/xylplm/zhconv-go.svg)](https://pkg.go.dev/github.com/xylplm/zhconv-go)
 
 - 单向：只做 `t2s`（面向 zh-Hans）
