@@ -86,9 +86,11 @@ func New(opts Options) (*Converter, error) {
 		if size == 0 || (r == utf8.RuneError && size == 1) {
 			continue
 		}
-		// Multi-rune sources belong in the phrase table.
+		// Multi-rune sources belong in the phrase table (skipped when phrases disabled).
 		if size != len(m.From) {
-			pendingMulti = append(pendingMulti, m)
+			if !opts.DisablePhrases {
+				pendingMulti = append(pendingMulti, m)
+			}
 			continue
 		}
 		// Prefer compact 1:1 rune map when target is a single rune.
@@ -380,6 +382,9 @@ func (c *Converter) convertToBytes(s string) (buf []byte, changed bool) {
 // matchPhraseAt returns replacement and matched traditional byte length.
 // Candidates are exact UTF-8 substring compares; first hit is longest.
 func (c *Converter) matchPhraseAt(s string, byteIndex int, first rune) (string, int) {
+	if c.phrases == nil {
+		return "", 0
+	}
 	list := c.phrases[first]
 	if len(list) == 0 {
 		return "", 0

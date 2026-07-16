@@ -249,6 +249,32 @@ func TestDisablePhrases(t *testing.T) {
 	if got != "软体" {
 		t.Fatalf("DisablePhrases: got %q, want 软体", got)
 	}
+	if c.hasPhrase {
+		t.Fatal("DisablePhrases must not install phrase buckets")
+	}
+}
+
+func TestDisablePhrasesDropsMultiRuneCharSources(t *testing.T) {
+	// Multi-rune "char" entries must not re-enter the phrase table when phrases are off.
+	c, err := New(Options{
+		DisablePhrases: true,
+		Chars: []table.Mapping{
+			{From: "軟體", To: "软件"}, // multi-rune source
+			{From: "網", To: "网"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.hasPhrase {
+		t.Fatal("expected no phrases")
+	}
+	if got := c.Convert("軟體"); got != "軟體" {
+		t.Fatalf("multi-rune char source must not apply when phrases disabled: %q", got)
+	}
+	if got := c.Convert("網"); got != "网" {
+		t.Fatalf("single-rune char should still apply: %q", got)
+	}
 }
 
 func TestEmptyConverterNoopFastPath(t *testing.T) {
@@ -266,6 +292,59 @@ func TestEmptyConverterNoopFastPath(t *testing.T) {
 	b := []byte(in)
 	if got := c.ConvertBytes(b); &got[0] != &b[0] {
 		t.Fatal("empty converter ConvertBytes should return same slice")
+	}
+}
+
+func TestConvertBytesChangedAllocatesNewSlice(t *testing.T) {
+	in := []byte("軟體")
+	got := ToSimplifiedBytes(in)
+	if string(got) != "软件" {
+		t.Fatalf("got %q", got)
+	}
+	if &got[0] == &in[0] {
+		t.Fatal("changed ConvertBytes must not alias input")
+	}
+	// Mutating input must not affect prior result.
+	in[0] = 'X'
+	if string(got) != "软件" {
+		t.Fatal("result must own its buffer")
+	}
+}
+
+func TestPhraseTargetCharNormalizedAtLoad(t *testing.T) {
+	// Phrase target still traditional; load-time char map must normalize it.
+	c, err := New(Options{
+		Chars: []table.Mapping{
+			{From: "體", To: "体"},
+			{From: "軟", To: "软"},
+		},
+		Phrases: []table.Mapping{
+			{From: "軟體", To: "軟體"}, // would be no-op without char normalize of target... from==to skipped
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// from==to phrase is skipped; single chars still apply.
+	if got := c.Convert("軟體"); got != "软体" {
+		t.Fatalf("char fallback: %q", got)
+	}
+
+	c2, err := New(Options{
+		Chars: []table.Mapping{
+			{From: "務", To: "务"},
+			{From: "器", To: "器"},
+			{From: "服", To: "服"},
+		},
+		Phrases: []table.Mapping{
+			{From: "伺服器", To: "服務器"}, // 務 traditional in target
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c2.Convert("伺服器"); got != "服务器" {
+		t.Fatalf("phrase target should be char-normalized: %q", got)
 	}
 }
 
