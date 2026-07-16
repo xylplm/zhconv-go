@@ -41,23 +41,23 @@ table/phrases.tsv
 ## GitHub Actions 自动 PR
 
 工作流：`.github/workflows/dictionary.yml`  
-Actions 列表显示名：**Dictionary**
+Actions 列表显示名：**词典同步**
 
 | 触发 | 行为 |
 |---|---|
-| 每周一 03:17 UTC（cron） | 拉取 OpenCC `master`，有变更则开/更新 PR |
-| `workflow_dispatch` | 可选手动指定 ref |
+| 每周一 03:17 UTC（定时） | 拉取 OpenCC 最新词表，有变化才开/更新 PR |
+| 手动 Run workflow | 可选手动指定 OpenCC 版本 |
 
 PR 特性：
 
 - 固定分支：`chore/dictionary-sync`（有更新则刷新同一 PR）
 - 标题：`chore 🔧: 同步 OpenCC 词典 <short-sha>`
-- 合并前已跑 `go vet` + `go test`
-- 仅提交 `dict/**` 与 `table/*.tsv`
+- 合并前已跑检查与测试
+- 只提交词表相关文件
 
 ### 手动触发
 
-GitHub → Actions → **Dictionary** → Run workflow
+GitHub → Actions → **词典同步** → Run workflow
 
 ### 权限说明
 

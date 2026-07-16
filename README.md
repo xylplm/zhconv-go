@@ -2,9 +2,9 @@
 
 纯 Go 实现的**繁体 → 简体**中文转换库。
 
-[![CI](https://github.com/xylplm/zhconv-go/actions/workflows/ci.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/ci.yml)
-[![Release](https://github.com/xylplm/zhconv-go/actions/workflows/release.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/release.yml)
-[![Dictionary](https://github.com/xylplm/zhconv-go/actions/workflows/dictionary.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/dictionary.yml)
+[![代码测试](https://github.com/xylplm/zhconv-go/actions/workflows/ci.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/ci.yml)
+[![版本发布](https://github.com/xylplm/zhconv-go/actions/workflows/release.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/release.yml)
+[![词典同步](https://github.com/xylplm/zhconv-go/actions/workflows/dictionary.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/dictionary.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/xylplm/zhconv-go.svg)](https://pkg.go.dev/github.com/xylplm/zhconv-go)
 
 - 单向：只做 `t2s`（面向 zh-Hans）

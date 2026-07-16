@@ -1,5 +1,5 @@
-# 发版：打 v* tag 后构建多平台 CLI 并创建 GitHub Release
-name: Release
+# 推送 v* 标签后：跑测试、打多平台 CLI 包、发布到 GitHub Releases
+name: 版本发布
 
 on:
   push:
@@ -15,27 +15,27 @@ permissions:
 
 jobs:
   publish:
-    name: Publish
+    name: 构建并发布
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
+      - name: 检出代码
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Go
+      - name: 安装 Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
           cache: true
 
-      - name: Test
+      - name: 发布前测试
         run: |
           go vet ./...
           go test ./... -count=1
 
-      - name: Extract version
+      - name: 解析版本号
         id: meta
         shell: bash
         run: |
@@ -44,14 +44,14 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Build multi-platform binaries
+      - name: 交叉编译多平台 CLI
         shell: bash
         run: |
           set -euo pipefail
           chmod +x ./scripts/build-release.sh
           bash ./scripts/build-release.sh "${{ steps.meta.outputs.tag }}"
 
-      - name: Generate checksums
+      - name: 生成校验和
         working-directory: dist
         shell: bash
         run: |
@@ -60,7 +60,7 @@ jobs:
           sha256sum * > checksums.txt
           cat checksums.txt
 
-      - name: Create GitHub Release
+      - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}

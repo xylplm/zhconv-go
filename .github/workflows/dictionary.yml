@@ -1,5 +1,5 @@
-# 词典同步：定期从 OpenCC 重生词表，有变更则开 PR
-name: Dictionary
+# 每周/手动：从 OpenCC 更新繁转简词表，有变化才自动开 PR
+name: 词典同步
 
 on:
   schedule:
@@ -23,22 +23,22 @@ permissions:
 
 jobs:
   sync:
-    name: Sync
+    name: 拉取并开 PR
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout
+      - name: 检出代码
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Go
+      - name: 安装 Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.26.x"
           cache: true
 
-      - name: Resolve OpenCC ref
+      - name: 解析 OpenCC 版本
         id: ref
         run: |
           REF="${{ github.event.inputs.ref }}"
@@ -48,7 +48,7 @@ jobs:
           echo "value=$REF" >> "$GITHUB_OUTPUT"
           echo "Using OpenCC ref: $REF"
 
-      - name: Regenerate dictionaries
+      - name: 重新生成词表
         env:
           OPENCC_REF: ${{ steps.ref.outputs.value }}
         run: |
@@ -68,7 +68,7 @@ jobs:
           print(f"counts ok: chars={chars} phrases={phrases}")
           PY
 
-      - name: Detect changes
+      - name: 检查是否有词表变化
         id: changes
         run: |
           # 仅以 TSV 映射判断是否需要 PR（SOURCE.json 仅在内容变化时更新）
@@ -84,13 +84,13 @@ jobs:
             git diff --stat -- dict table
           fi
 
-      - name: Test regenerated tables
+      - name: 用新词表跑测试
         if: steps.changes.outputs.changed == 'true'
         run: |
           go vet ./...
           go test ./... -count=1
 
-      - name: Build PR body
+      - name: 生成 PR 说明
         if: steps.changes.outputs.changed == 'true'
         id: body
         run: |
@@ -135,10 +135,10 @@ jobs:
           - 台/港异体字以 reverse variants 补洞，不覆盖 \`TSCharacters\`
           - 请人工扫一眼 diff 后合并；合并后如需发版再打 tag
 
-          > 由 **Dictionary** workflow 创建，可手动 Run workflow 重跑。
+          > 由 **词典同步** 工作流创建，可在 Actions 里手动重跑。
           EOF
 
-      - name: Create or update Pull Request
+      - name: 创建或更新 Pull Request
         if: steps.changes.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
