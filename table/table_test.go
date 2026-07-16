@@ -16,6 +16,17 @@ func TestLoadTSVIgnoresCommentsAndBlank(t *testing.T) {
 	}
 }
 
+func TestLoadTSVCRLF(t *testing.T) {
+	raw := "軟體\t软件\r\n網路\t网络\r\n"
+	ms, err := LoadTSV([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ms) != 2 {
+		t.Fatalf("got %d mappings", len(ms))
+	}
+}
+
 func TestLoadTSVFirstCandidateOnly(t *testing.T) {
 	raw := "乾紅\t干红 乾红\n"
 	ms, err := LoadTSV([]byte(raw))

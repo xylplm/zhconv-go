@@ -5,17 +5,26 @@ import "sync"
 var (
 	defaultOnce sync.Once
 	defaultConv *Converter
-	defaultErr  error
 )
+
+// identity returns an empty converter that leaves text unchanged.
+func identity() *Converter {
+	return &Converter{
+		char1: make(map[rune]rune),
+	}
+}
 
 func defaultConverter() *Converter {
 	defaultOnce.Do(func() {
-		defaultConv, defaultErr = New(Options{})
+		c, err := New(Options{})
+		if err != nil {
+			// Embedded dictionaries are validated by tests. Fall back to a safe
+			// no-op converter instead of panicking in production call paths.
+			defaultConv = identity()
+			return
+		}
+		defaultConv = c
 	})
-	if defaultErr != nil {
-		// Embedded dictionaries are part of the module build; a load failure is fatal.
-		panic("zhconv: load default converter: " + defaultErr.Error())
-	}
 	return defaultConv
 }
 
@@ -28,4 +37,10 @@ func ToSimplified(s string) string {
 // ToSimplifiedBytes converts traditional Chinese bytes to simplified Chinese.
 func ToSimplifiedBytes(p []byte) []byte {
 	return Default().ConvertBytes(p)
+}
+
+// NewDefault is an explicit constructor equivalent to New(Options{}).
+// Prefer Default()/ToSimplified for normal use.
+func NewDefault() (*Converter, error) {
+	return New(Options{})
 }

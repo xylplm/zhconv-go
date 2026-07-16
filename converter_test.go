@@ -27,7 +27,6 @@ func TestToSimplifiedCommonPhrases(t *testing.T) {
 }
 
 func TestTaiwanRegionalPhrases(t *testing.T) {
-	// OpenCC TWPhrasesRev-oriented coverage commonly seen in software/subtitles.
 	cases := map[string]string{
 		"伺服器": "服务器",
 		"檔案":  "文件",
@@ -56,7 +55,6 @@ func TestTaiwanRegionalPhrases(t *testing.T) {
 }
 
 func TestRegionalCharacterVariants(t *testing.T) {
-	// Same meaning, different regional traditional glyphs -> one simplified form.
 	cases := []struct {
 		in   string
 		want string
@@ -83,7 +81,6 @@ func TestRegionalCharacterVariants(t *testing.T) {
 func TestSubtitleLikeParagraph(t *testing.T) {
 	in := "主角安裝了最新軟體，透過網際網路連線到資料庫伺服器，螢幕上顯示系統訊息。"
 	got := ToSimplified(in)
-	// Must not leave common traditional computer terms.
 	for _, bad := range []string{"軟體", "網際", "網路", "資料庫", "伺服器", "螢幕", "訊息", "連線", "透過", "安裝", "顯示"} {
 		if strings.Contains(got, bad) {
 			t.Fatalf("traditional fragment %q still present in: %q", bad, got)
@@ -98,7 +95,8 @@ func TestSubtitleLikeParagraph(t *testing.T) {
 
 func TestConvertKeepsASCIIAndAlreadySimplified(t *testing.T) {
 	in := "Hello 世界 123 软件与网络"
-	if got := ToSimplified(in); got != in {
+	got := ToSimplified(in)
+	if got != in {
 		t.Fatalf("simplified/ascii text changed: %q -> %q", in, got)
 	}
 }
@@ -113,7 +111,6 @@ func TestConvertIsIdempotentOnSimplifiedOutput(t *testing.T) {
 }
 
 func TestConvertPhraseLongestMatch(t *testing.T) {
-	// 網際網路 should prefer the whole phrase over 網路 if both exist.
 	in := "網際網路連線"
 	got := ToSimplified(in)
 	if got != "互联网连接" {
@@ -131,6 +128,9 @@ func TestConvertEmptyAndNilReceiver(t *testing.T) {
 	}
 	if got := c.ConvertBytes(nil); got != nil {
 		t.Fatalf("nil converter ConvertBytes(nil)=%v", got)
+	}
+	if got := c.ConvertBytes([]byte("軟體")); string(got) != "軟體" {
+		t.Fatalf("nil converter should pass bytes through, got %q", got)
 	}
 }
 
@@ -153,18 +153,24 @@ func TestConvertBytesRoundTripValidText(t *testing.T) {
 	}
 }
 
+func TestConvertBytesNoChangeReturnsSameSlice(t *testing.T) {
+	in := []byte("Hello 123")
+	got := ToSimplifiedBytes(in)
+	if &got[0] != &in[0] {
+		t.Fatal("no-op ConvertBytes should return the input slice")
+	}
+}
+
 func TestDisablePhrases(t *testing.T) {
 	c, err := New(Options{DisablePhrases: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Without phrases, 軟體 still becomes 软体 via chars, not necessarily 软件.
 	got := c.Convert("軟體")
 	if strings.ContainsAny(got, "軟體") {
 		t.Fatalf("char-level should still convert glyphs: %q", got)
 	}
 	if got == "软件" {
-		// Not wrong, but would mean phrase table still active.
 		t.Fatalf("DisablePhrases unexpectedly produced phrase result %q", got)
 	}
 }
@@ -174,6 +180,19 @@ func TestDefaultSingleton(t *testing.T) {
 	b := Default()
 	if a != b {
 		t.Fatal("Default() should return the same instance")
+	}
+	if a == nil {
+		t.Fatal("Default() returned nil")
+	}
+}
+
+func TestNewDefault(t *testing.T) {
+	c, err := NewDefault()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Convert("軟體") != "软件" {
+		t.Fatalf("NewDefault convert failed: %q", c.Convert("軟體"))
 	}
 }
 
@@ -194,7 +213,6 @@ func TestConcurrentConvert(t *testing.T) {
 }
 
 func TestNoPanicOnAllRuneEdges(t *testing.T) {
-	// Single-byte, multi-byte, empty, and mixed content must not panic.
 	samples := []string{
 		"",
 		"a",
@@ -219,6 +237,17 @@ func TestNoPanicOnAllRuneEdges(t *testing.T) {
 
 func BenchmarkToSimplified(b *testing.B) {
 	in := strings.Repeat("這是一段用於基準測試的繁體中文字幕，包含軟體、網路、資料庫、影片與訊息。", 20)
+	c := Default()
+	b.ReportAllocs()
+	b.SetBytes(int64(len(in)))
+	b.ResetTimer()
+	for b.Loop() {
+		_ = c.Convert(in)
+	}
+}
+
+func BenchmarkToSimplifiedNoChange(b *testing.B) {
+	in := strings.Repeat("Hello 世界 software network database 12345 ", 40)
 	c := Default()
 	b.ReportAllocs()
 	b.SetBytes(int64(len(in)))

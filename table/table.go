@@ -1,7 +1,6 @@
 package table
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"strings"
@@ -15,37 +14,47 @@ type Mapping struct {
 }
 
 // LoadTSV parses traditional\tsimplified lines.
-// Blank lines and # comments are ignored. Multi-candidate values are not expected
-// in normalized dicts; if present, only the first field is used.
+// Blank lines and # comments are ignored. Multi-candidate values keep the first field.
 func LoadTSV(data []byte) ([]Mapping, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
-	out := make([]Mapping, 0, 1024)
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	// Longest practical phrase is far below this; keep headroom for bad input.
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-
+	// Bound growth; embedded tables are a few thousand lines.
+	out := make([]Mapping, 0, 4096)
 	lineNo := 0
-	for sc.Scan() {
+	for len(data) > 0 {
 		lineNo++
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		var line []byte
+		if i := bytes.IndexByte(data, '\n'); i >= 0 {
+			line = data[:i]
+			data = data[i+1:]
+		} else {
+			line = data
+			data = nil
+		}
+		// Trim CR for Windows-edited files.
+		if n := len(line); n > 0 && line[n-1] == '\r' {
+			line = line[:n-1]
+		}
+		// Fast skip blanks / comments without string alloc when possible.
+		trim := bytes.TrimSpace(line)
+		if len(trim) == 0 || trim[0] == '#' {
 			continue
 		}
-		from, to, ok := strings.Cut(line, "\t")
-		if !ok {
+		tab := bytes.IndexByte(trim, '\t')
+		if tab < 0 {
 			return nil, fmt.Errorf("table: line %d: missing tab separator", lineNo)
 		}
-		from = strings.TrimSpace(from)
-		to = strings.TrimSpace(to)
-		if to == "" {
+		from := string(bytes.TrimSpace(trim[:tab]))
+		toRaw := bytes.TrimSpace(trim[tab+1:])
+		if len(toRaw) == 0 {
 			return nil, fmt.Errorf("table: line %d: empty target", lineNo)
 		}
-		// Be tolerant if a raw OpenCC multi-value line sneaks in.
-		if i := strings.IndexByte(to, ' '); i >= 0 {
-			to = to[:i]
+		// OpenCC multi-candidate: keep first token.
+		if sp := bytes.IndexByte(toRaw, ' '); sp >= 0 {
+			toRaw = toRaw[:sp]
 		}
+		to := string(toRaw)
 		if from == "" || from == to {
 			continue
 		}
@@ -54,8 +63,29 @@ func LoadTSV(data []byte) ([]Mapping, error) {
 		}
 		out = append(out, Mapping{From: from, To: to})
 	}
-	if err := sc.Err(); err != nil {
-		return nil, fmt.Errorf("table: scan: %w", err)
-	}
 	return out, nil
+}
+
+// MustLoadTSV is like LoadTSV but panics on error (for tests/tooling only).
+func MustLoadTSV(data []byte) []Mapping {
+	ms, err := LoadTSV(data)
+	if err != nil {
+		panic(err)
+	}
+	return ms
+}
+
+// JoinPreview is a tiny helper for tests/debug.
+func JoinPreview(ms []Mapping, n int) string {
+	if n <= 0 || len(ms) == 0 {
+		return ""
+	}
+	if n > len(ms) {
+		n = len(ms)
+	}
+	parts := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		parts = append(parts, ms[i].From+"→"+ms[i].To)
+	}
+	return strings.Join(parts, ", ")
 }
