@@ -1,9 +1,9 @@
-Dictionary files in this directory are derived from OpenCC
-(https://github.com/BYVoid/OpenCC), licensed under Apache License 2.0.
+Dictionary files are derived from OpenCC (https://github.com/BYVoid/OpenCC),
+licensed under Apache License 2.0.
 
-Sources:
+Normalized sources:
 - TSCharacters.txt / TSPhrases.txt (traditional -> simplified)
-- TWPhrasesRev.txt (Taiwan phrases reversed toward simplified)
+- TWPhrasesRev.txt (Taiwan phrases toward simplified)
+- TWVariants.txt / HKVariants.txt (regional glyphs reversed toward simplified)
 
-Normalized into chars.tsv and phrases.tsv for embedding.
-When a source entry has multiple candidates, the first candidate is kept.
+When an entry has multiple candidates, the first candidate is kept.

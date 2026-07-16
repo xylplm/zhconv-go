@@ -3,6 +3,7 @@ package zhconv
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestToSimplifiedCommonPhrases(t *testing.T) {
@@ -25,10 +26,89 @@ func TestToSimplifiedCommonPhrases(t *testing.T) {
 	}
 }
 
+func TestTaiwanRegionalPhrases(t *testing.T) {
+	// OpenCC TWPhrasesRev-oriented coverage commonly seen in software/subtitles.
+	cases := map[string]string{
+		"伺服器": "服务器",
+		"檔案":  "文件",
+		"螢幕":  "屏幕",
+		"印表機": "打印机",
+		"光碟":  "光盘",
+		"韌體":  "固件",
+		"晶片":  "芯片",
+		"迴圈":  "循环",
+		"物件":  "对象",
+		"介面":  "界面",
+		"函式":  "函数",
+		"變數":  "变量",
+		"字串":  "字符串",
+		"布林":  "布尔",
+		"計程車": "出租车",
+		"匯出":  "导出",
+		"匯入":  "导入",
+		"佇列":  "队列",
+	}
+	for in, want := range cases {
+		if got := ToSimplified(in); got != want {
+			t.Fatalf("TW phrase %q => %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRegionalCharacterVariants(t *testing.T) {
+	// Same meaning, different regional traditional glyphs -> one simplified form.
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"裏面", "里面"},
+		{"裡面", "里面"},
+		{"啓動", "启动"},
+		{"啟動", "启动"},
+		{"僞造", "伪造"},
+		{"偽造", "伪造"},
+		{"羣衆", "群众"},
+		{"綫路", "线路"},
+		{"線路", "线路"},
+		{"說明", "说明"},
+		{"説明", "说明"},
+	}
+	for _, tc := range cases {
+		if got := ToSimplified(tc.in); got != tc.want {
+			t.Fatalf("variant %q => %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestSubtitleLikeParagraph(t *testing.T) {
+	in := "主角安裝了最新軟體，透過網際網路連線到資料庫伺服器，螢幕上顯示系統訊息。"
+	got := ToSimplified(in)
+	// Must not leave common traditional computer terms.
+	for _, bad := range []string{"軟體", "網際", "網路", "資料庫", "伺服器", "螢幕", "訊息", "連線", "透過", "安裝", "顯示"} {
+		if strings.Contains(got, bad) {
+			t.Fatalf("traditional fragment %q still present in: %q", bad, got)
+		}
+	}
+	for _, need := range []string{"软件", "互联", "数据库", "服务器", "屏幕", "消息"} {
+		if !strings.Contains(got, need) {
+			t.Fatalf("expected %q in output: %q", need, got)
+		}
+	}
+}
+
 func TestConvertKeepsASCIIAndAlreadySimplified(t *testing.T) {
-	in := "Hello 世界 123"
+	in := "Hello 世界 123 软件与网络"
 	if got := ToSimplified(in); got != in {
 		t.Fatalf("simplified/ascii text changed: %q -> %q", in, got)
+	}
+}
+
+func TestConvertIsIdempotentOnSimplifiedOutput(t *testing.T) {
+	in := "這是一段繁體測試，包含軟體、網路與資料庫。"
+	once := ToSimplified(in)
+	twice := ToSimplified(once)
+	if once != twice {
+		t.Fatalf("not idempotent:\n1: %q\n2: %q", once, twice)
 	}
 }
 
@@ -49,6 +129,9 @@ func TestConvertEmptyAndNilReceiver(t *testing.T) {
 	if got := c.Convert("軟體"); got != "軟體" {
 		t.Fatalf("nil converter should return input, got %q", got)
 	}
+	if got := c.ConvertBytes(nil); got != nil {
+		t.Fatalf("nil converter ConvertBytes(nil)=%v", got)
+	}
 }
 
 func TestConvertInvalidUTF8Passthrough(t *testing.T) {
@@ -62,6 +145,14 @@ func TestConvertInvalidUTF8Passthrough(t *testing.T) {
 	}
 }
 
+func TestConvertBytesRoundTripValidText(t *testing.T) {
+	in := []byte("繁體中文軟體")
+	got := ToSimplifiedBytes(in)
+	if string(got) != "繁体中文软件" {
+		t.Fatalf("ConvertBytes unexpected: %q", got)
+	}
+}
+
 func TestDisablePhrases(t *testing.T) {
 	c, err := New(Options{DisablePhrases: true})
 	if err != nil {
@@ -71,6 +162,18 @@ func TestDisablePhrases(t *testing.T) {
 	got := c.Convert("軟體")
 	if strings.ContainsAny(got, "軟體") {
 		t.Fatalf("char-level should still convert glyphs: %q", got)
+	}
+	if got == "软件" {
+		// Not wrong, but would mean phrase table still active.
+		t.Fatalf("DisablePhrases unexpectedly produced phrase result %q", got)
+	}
+}
+
+func TestDefaultSingleton(t *testing.T) {
+	a := Default()
+	b := Default()
+	if a != b {
+		t.Fatal("Default() should return the same instance")
 	}
 }
 
@@ -87,6 +190,30 @@ func TestConcurrentConvert(t *testing.T) {
 	}
 	for range 8 {
 		<-done
+	}
+}
+
+func TestNoPanicOnAllRuneEdges(t *testing.T) {
+	// Single-byte, multi-byte, empty, and mixed content must not panic.
+	samples := []string{
+		"",
+		"a",
+		"中",
+		"繁體",
+		strings.Repeat("軟體網路", 1000),
+		string(rune(0)),
+		string([]byte{0x80}),
+	}
+	for _, s := range samples {
+		func(s string) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("panic on %q: %v", s, r)
+				}
+			}()
+			_ = ToSimplified(s)
+			_ = utf8.ValidString(ToSimplified(s[:min(len(s), 3)]))
+		}(s)
 	}
 }
 
