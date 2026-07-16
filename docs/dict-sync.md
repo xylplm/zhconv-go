@@ -57,7 +57,11 @@ PR 特性：
 
 ### 手动触发
 
-GitHub → Actions → **词典同步** → Run workflow
+1. GitHub → **Actions**
+2. 左侧点 **词典同步**（必须点进该工作流，总览页没有按钮）
+3. 右侧 **Run workflow**
+4. 分支选 `main`；OpenCC 版本默认可填 `master`
+5. 绿色 Run workflow
 
 ### 权限说明
 

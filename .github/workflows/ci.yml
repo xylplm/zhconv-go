@@ -1,4 +1,4 @@
-# push / PR 时自动跑：代码检查 + 单元测试 + 演示 + 基准冒烟
+# 推代码/提 PR 自动跑；也可在 Actions 页手动点「Run workflow」
 name: 代码测试
 
 on:
@@ -6,6 +6,7 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

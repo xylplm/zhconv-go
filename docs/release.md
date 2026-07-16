@@ -4,11 +4,22 @@
 
 仓库已配置 GitHub Actions：
 
-| Actions 显示名 | 文件 | 什么时候跑 | 干什么 |
-|---|---|---|---|
-| **代码测试** | `ci.yml` | 推代码 / 提 PR | 检查 + 单测 + 演示 + 基准冒烟 |
-| **词典同步** | `dictionary.yml` | 每周一 / 手动点 Run | 从 OpenCC 更新词表，有变化才开 PR（见 [dict-sync.md](dict-sync.md)） |
-| **版本发布** | `release.yml` | 推送 `v1.2.3` 这类 tag | 打多平台 CLI 包并发 GitHub Release |
+| Actions 显示名 | 文件 | 什么时候跑 | 干什么 | 能否手动 |
+|---|---|---|---|---|
+| **代码测试** | `ci.yml` | 推代码 / 提 PR / 手动 | 检查 + 单测 + 演示 + 基准冒烟 | ✅ |
+| **词典同步** | `dictionary.yml` | 每周一 / 手动 | 从 OpenCC 更新词表，有变化才开 PR（见 [dict-sync.md](dict-sync.md)） | ✅ |
+| **版本发布** | `release.yml` | 推送 `v*` tag / 手动填已有 tag | 打多平台 CLI 包并发 GitHub Release | ✅（需已有标签） |
+
+### 手动触发怎么点
+
+1. 打开仓库 **Actions**
+2. 左侧点具体工作流（如「代码测试」），不要只停在总览
+3. 右侧 **Run workflow** → 选分支 `main` → 绿色运行
+
+说明：
+
+- 按钮只出现在**已启用 `workflow_dispatch` 且文件在默认分支**的工作流页
+- **版本发布**手动时必须填**已经 push 过的标签**（如 `v0.1.2`），不会自动帮你新建 tag
 
 ### 发布步骤
 

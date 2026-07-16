@@ -1,4 +1,4 @@
-# 每周/手动：从 OpenCC 更新繁转简词表，有变化才自动开 PR
+# 每周自动同步；也可在 Actions 页手动点「Run workflow」
 name: 词典同步
 
 on:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "OpenCC git ref (branch/tag/sha)"
+        description: "OpenCC 版本（分支/标签/commit，默认 master）"
         required: false
         default: "master"
         type: string
@@ -71,7 +71,6 @@ jobs:
       - name: 检查是否有词表变化
         id: changes
         run: |
-          # 仅以 TSV 映射判断是否需要 PR（SOURCE.json 仅在内容变化时更新）
           if git diff --quiet -- \
               dict/chars.tsv dict/phrases.tsv \
               table/chars.tsv table/phrases.tsv; then
@@ -130,12 +129,10 @@ jobs:
           - \`dict/*\` 与 \`table/*\` 内容一致
 
           ### 说明
-          - 仅做 **繁→简** 词表维护，不引入双向/多地区输出配置
-          - 多候选词条保留第一候选
-          - 台/港异体字以 reverse variants 补洞，不覆盖 \`TSCharacters\`
+          - 仅做 **繁→简** 词表维护
           - 请人工扫一眼 diff 后合并；合并后如需发版再打 tag
 
-          > 由 **词典同步** 工作流创建，可在 Actions 里手动重跑。
+          > 由 **词典同步** 工作流创建（可定时或手动触发）。
           EOF
 
       - name: 创建或更新 Pull Request
