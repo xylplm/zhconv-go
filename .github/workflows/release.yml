@@ -42,7 +42,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./scripts/build-release.sh "${{ steps.meta.outputs.tag }}"
+          chmod +x ./scripts/build-release.sh
+          bash ./scripts/build-release.sh "${{ steps.meta.outputs.tag }}"
 
       - name: Generate checksums
         working-directory: dist
