@@ -456,7 +456,7 @@ func atomicWriteFile(path string, data []byte, mode os.FileMode) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	// Ensure cleanup on any failure path. Successful rename removes tmpName.
+	// Cleanup tmp on failure. Successful replace path clears tmpName via rename.
 	ok := false
 	defer func() {
 		if !ok {
@@ -479,14 +479,28 @@ func atomicWriteFile(path string, data []byte, mode os.FileMode) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	// Windows cannot rename over an existing file; remove destination first.
-	// On POSIX, Remove+Rename is still safe for our single-writer tooling path.
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return err
+
+	// Prefer direct rename (atomic replace on POSIX).
+	if err := os.Rename(tmpName, path); err == nil {
+		ok = true
+		return nil
+	}
+
+	// Windows / busy targets: rotate via backup so a crash never leaves
+	// the destination deleted without a replacement.
+	bak := path + ".bak"
+	_ = os.Remove(bak)
+	if _, statErr := os.Stat(path); statErr == nil {
+		if err := os.Rename(path, bak); err != nil {
+			return err
+		}
 	}
 	if err := os.Rename(tmpName, path); err != nil {
+		// Best-effort restore previous content.
+		_ = os.Rename(bak, path)
 		return err
 	}
+	_ = os.Remove(bak)
 	ok = true
 	return nil
 }

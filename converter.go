@@ -28,8 +28,9 @@ type Converter struct {
 	charN map[rune]string
 	// phrases indexes traditional phrases by their first rune, longest-first.
 	phrases map[rune][]phrase
-	// hasPhrase avoids map lookup when no phrases are installed.
+	// hasPhrase / hasCharN avoid map lookups when those tables are empty.
 	hasPhrase bool
+	hasCharN  bool
 }
 
 // Options controls converter construction.
@@ -67,11 +68,12 @@ func New(opts Options) (*Converter, error) {
 		}
 	}
 
-	c := &Converter{
-		char1: make(map[rune]rune, len(chars)),
+	c := &Converter{}
+	if len(chars) > 0 {
+		c.char1 = make(map[rune]rune, len(chars))
 	}
 
-	pendingMulti := make([]table.Mapping, 0)
+	pendingMulti := make([]table.Mapping, 0, 4)
 	for _, m := range chars {
 		if m.From == "" || m.To == "" || m.From == m.To {
 			continue
@@ -92,6 +94,9 @@ func New(opts Options) (*Converter, error) {
 		// Prefer compact 1:1 rune map when target is a single rune.
 		tr, tsize := utf8.DecodeRuneInString(m.To)
 		if tsize == len(m.To) && tr != utf8.RuneError {
+			if c.char1 == nil {
+				c.char1 = make(map[rune]rune)
+			}
 			c.char1[r] = tr
 			continue
 		}
@@ -100,9 +105,10 @@ func New(opts Options) (*Converter, error) {
 		}
 		c.charN[r] = m.To
 	}
+	c.hasCharN = len(c.charN) > 0
 
 	// Phrase targets may still contain traditional glyphs (OpenCC-style chains).
-	// Normalize with the character map once at load time.
+	// Normalize with the character map once at load time (chars only; no phrases).
 	allPhrases := make([]table.Mapping, 0, len(phrases)+len(pendingMulti))
 	allPhrases = append(allPhrases, phrases...)
 	allPhrases = append(allPhrases, pendingMulti...)
@@ -150,6 +156,9 @@ func (c *Converter) addPhrase(from, to string) {
 		}
 		tr, tsize := utf8.DecodeRuneInString(to)
 		if tsize == len(to) && tr != utf8.RuneError {
+			if c.char1 == nil {
+				c.char1 = make(map[rune]rune)
+			}
 			c.char1[r] = tr
 			return
 		}
@@ -157,6 +166,7 @@ func (c *Converter) addPhrase(from, to string) {
 			c.charN = make(map[rune]string)
 		}
 		c.charN[r] = to
+		c.hasCharN = true
 		return
 	}
 
@@ -200,6 +210,8 @@ func (c *Converter) finalizePhrases() {
 }
 
 // simplifyWithChars applies character-level mapping only (no phrase recursion).
+// Used at load time to normalize phrase targets; must not consult phrases
+// (phrase table may still be incomplete while New is running).
 func (c *Converter) simplifyWithChars(s string) string {
 	if c == nil || s == "" {
 		return s
@@ -212,7 +224,7 @@ func (c *Converter) simplifyWithChars(s string) string {
 }
 
 func (c *Converter) mapChars(s string) (string, bool) {
-	if len(c.char1) == 0 && len(c.charN) == 0 {
+	if len(c.char1) == 0 && !c.hasCharN {
 		return s, false
 	}
 	// Lazy builder: only allocate on first replacement (load-time helper).
@@ -234,13 +246,17 @@ func (c *Converter) mapChars(s string) (string, bool) {
 				started = true
 			}
 			buf = utf8.AppendRune(buf, repl)
-		} else if repl, ok := c.charN[r]; ok {
-			if !started {
-				buf = make([]byte, 0, len(s))
-				buf = append(buf, s[:i]...)
-				started = true
+		} else if c.hasCharN {
+			if repl, ok := c.charN[r]; ok {
+				if !started {
+					buf = make([]byte, 0, len(s))
+					buf = append(buf, s[:i]...)
+					started = true
+				}
+				buf = append(buf, repl...)
+			} else if started {
+				buf = append(buf, s[i:i+size]...)
 			}
-			buf = append(buf, repl...)
 		} else if started {
 			buf = append(buf, s[i:i+size]...)
 		}
@@ -263,12 +279,13 @@ func (c *Converter) Convert(s string) string {
 	if !changed {
 		return s
 	}
-	return string(buf)
+	// Zero-copy: buf is freshly allocated and not retained elsewhere.
+	return bytesToStringOwned(buf)
 }
 
 // ConvertBytes converts traditional Chinese bytes to simplified Chinese.
 // When no change is required, the input slice is returned as-is (no allocation).
-// When a change occurs, a newly allocated slice is returned (single buffer, no intermediate string).
+// When a change occurs, a newly allocated slice is returned (single buffer).
 // p must not be mutated during the call.
 func (c *Converter) ConvertBytes(p []byte) []byte {
 	if c == nil || len(p) == 0 {
@@ -286,6 +303,11 @@ func (c *Converter) ConvertBytes(p []byte) []byte {
 // convertToBytes is the shared scan core.
 // changed=false keeps the caller's input; changed=true returns a fresh buffer.
 func (c *Converter) convertToBytes(s string) (buf []byte, changed bool) {
+	// Empty / identity converter: O(1) no-op (no full scan).
+	if !c.hasPhrase && len(c.char1) == 0 && !c.hasCharN {
+		return nil, false
+	}
+
 	// Lazy builder: only allocate when the first replacement happens.
 	i := 0
 	for i < len(s) {
@@ -311,7 +333,7 @@ func (c *Converter) convertToBytes(s string) (buf []byte, changed bool) {
 		if c.hasPhrase {
 			if to, nBytes := c.matchPhraseAt(s, i, r); nBytes > 0 {
 				if !changed {
-					// Small headroom for rare multi-rune char expansions later.
+					// Headroom for rare multi-rune char expansions later.
 					buf = make([]byte, 0, len(s)+8)
 					buf = append(buf, s[:i]...)
 					changed = true
@@ -333,7 +355,7 @@ func (c *Converter) convertToBytes(s string) (buf []byte, changed bool) {
 			i += size
 			continue
 		}
-		if len(c.charN) > 0 {
+		if c.hasCharN {
 			if repl, ok := c.charN[r]; ok {
 				if !changed {
 					buf = make([]byte, 0, len(s)+8)

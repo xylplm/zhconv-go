@@ -32,11 +32,13 @@ zhconv-go/
 ## 热路径设计要点
 
 - **ASCII 快路径**：`<0x80` 字节直接跳过查表（字幕混排极常见）
+- **空转换器 O(1)**：无词组/字符表时直接返回，不做全文扫描（identity 降级）
 - **无变更 0 alloc**：首次替换前不分配；整段无命中直接返回原 string
+- **有变更 1 alloc（Convert）**：构建一块 `[]byte` 后 `unsafe` 零拷贝转 string
 - **词组匹配**：按首 rune 分桶 + 最长优先；UTF-8 子串整段比较（无临时 rune 缓冲）
-- **字符表**：`map[rune]rune` 1:1 热路径；极少数多码点目标进 `charN`
+- **字符表**：`map[rune]rune` 1:1 热路径；极少数多码点目标进 `charN`（`hasCharN` 短路）
 - **词表加载缓存**：`table.DefaultChars/Phrases` 进程内 `sync.Once`
-- **ConvertBytes**：无变更返回原 slice；有变更才分配（unsafe 只读视图）
+- **ConvertBytes**：无变更返回原 slice；有变更直接返回构建缓冲
 
 ## 转换流水线
 
@@ -98,8 +100,9 @@ phrases map[rune][]phrase // 按首字分桶，桶内按词长降序
 - 输入无需转换时：`Convert` 直接返回原字符串（0 alloc）
 - `ConvertBytes` 无变化时返回原 `[]byte`（0 alloc）
 - 有转换时：`Convert` / `ConvertBytes` 共用 `convertToBytes` 核心，只构建**一块**输出缓冲
-  - `Convert`：`string(buf)` 一次
-  - `ConvertBytes`：直接返回 `buf`，无中间 string 二次拷贝
+  - `Convert`：`bytesToStringOwned(buf)`（1 alloc，避免 `string([]byte)` 二次拷贝）
+  - `ConvertBytes`：直接返回 `buf`（1 alloc）
+- 加载期 `simplifyWithChars` 只用字符表，**不走词组**（避免 New 过程中半成品词组污染目标归一）
 
 ## 并发模型
 

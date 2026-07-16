@@ -245,11 +245,27 @@ func TestDisablePhrases(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := c.Convert("軟體")
-	if strings.ContainsAny(got, "軟體") {
-		t.Fatalf("char-level should still convert glyphs: %q", got)
+	// Char-only: 軟→软, 體→体; phrase table would yield 软件.
+	if got != "软体" {
+		t.Fatalf("DisablePhrases: got %q, want 软体", got)
 	}
-	if got == "软件" {
-		t.Fatalf("DisablePhrases unexpectedly produced phrase result %q", got)
+}
+
+func TestEmptyConverterNoopFastPath(t *testing.T) {
+	c, err := New(Options{
+		Chars:   []table.Mapping{},
+		Phrases: []table.Mapping{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := "軟體與網路" + strings.Repeat("a", 1024)
+	if got := c.Convert(in); got != in {
+		t.Fatalf("empty converter should return input identically, got %q", got)
+	}
+	b := []byte(in)
+	if got := c.ConvertBytes(b); &got[0] != &b[0] {
+		t.Fatal("empty converter ConvertBytes should return same slice")
 	}
 }
 
