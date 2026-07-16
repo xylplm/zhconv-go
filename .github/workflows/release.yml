@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          cache: true
+
+      - name: Test
+        run: |
+          go vet ./...
+          go test ./... -count=1
+
+      - name: Extract version
+        id: meta
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build multi-platform binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/build-release.sh "${{ steps.meta.outputs.tag }}"
+
+      - name: Generate checksums
+        working-directory: dist
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f checksums.txt
+          # sha256sum is available on ubuntu runners
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: zhconv-go ${{ steps.meta.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            ## zhconv-go ${{ steps.meta.outputs.tag }}
+
+            纯 Go 繁体 → 简体转换库 / CLI。
+
+            ### 安装库
+            ```bash
+            go get github.com/xylplm/zhconv-go@${{ steps.meta.outputs.tag }}
+            ```
+
+            ### 安装 CLI
+            ```bash
+            go install github.com/xylplm/zhconv-go/cmd/zhconv@${{ steps.meta.outputs.tag }}
+            ```
+
+            或下载下方对应平台压缩包，校验见 `checksums.txt`。
+
+            ### 快速使用
+            ```go
+            import "github.com/xylplm/zhconv-go"
+            _ = zhconv.ToSimplified("軟體與網路連線")
+            ```
+          files: |
+            dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

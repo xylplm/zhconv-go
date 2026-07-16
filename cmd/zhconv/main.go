@@ -12,12 +12,20 @@ import (
 	"github.com/xylplm/zhconv-go"
 )
 
+// version is injected by -ldflags at release build time.
+var version = "dev"
+
 func main() {
 	inPath := flag.String("i", "", "input file path (default: stdin)")
 	outPath := flag.String("o", "", "output file path (default: stdout)")
 	demo := flag.Bool("demo", false, "run built-in demo samples and exit")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 	if *demo {
 		runDemo()
 		return
@@ -64,7 +72,7 @@ func runDemo() {
 		"這是一段已經是简体中文的文字",
 		"Hello 世界 — 混合 ASCII",
 	}
-	fmt.Println("zhconv-go demo (traditional -> simplified)")
+	fmt.Printf("zhconv-go demo (traditional -> simplified) [%s]\n", version)
 	fmt.Println(strings.Repeat("-", 48))
 	for _, s := range samples {
 		fmt.Printf("IN : %s\nOUT: %s\n\n", s, zhconv.ToSimplified(s))

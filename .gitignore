@@ -7,6 +7,9 @@
 *.test
 *.out
 
+# Local release scratch
+/build_*/
+
 # IDE / OS
 .idea/
 .vscode/

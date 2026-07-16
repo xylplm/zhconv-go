@@ -2,6 +2,10 @@
 
 纯 Go 实现的**繁体 → 简体**中文转换库。
 
+[![CI](https://github.com/xylplm/zhconv-go/actions/workflows/ci.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/ci.yml)
+[![Release](https://github.com/xylplm/zhconv-go/actions/workflows/release.yml/badge.svg)](https://github.com/xylplm/zhconv-go/actions/workflows/release.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/xylplm/zhconv-go.svg)](https://pkg.go.dev/github.com/xylplm/zhconv-go)
+
 - 单向：只做 `t2s`（面向 zh-Hans）
 - 词组优先最长匹配，单字兜底
 - 覆盖：通用繁体字形 + 台湾用语词组 + 港台异体字反向映射
@@ -17,11 +21,23 @@
 
 ## 安装
 
+### 作为库
+
 ```bash
 go get github.com/xylplm/zhconv-go@latest
 ```
 
-## 使用
+要求：**Go 1.26+**
+
+### 安装 CLI
+
+```bash
+go install github.com/xylplm/zhconv-go/cmd/zhconv@latest
+```
+
+或从 [Releases](https://github.com/xylplm/zhconv-go/releases) 下载对应平台二进制。
+
+## 30 秒上手
 
 ```go
 package main
@@ -34,58 +50,70 @@ import (
 
 func main() {
 	fmt.Println(zhconv.ToSimplified("軟體與網路連線"))
-	// 软件与网络连线
+	// 软件与网络连接
 }
 ```
 
-自定义转换器：
+更多示例见：
+
+- [docs/usage.md](docs/usage.md)
+- [docs/architecture.md](docs/architecture.md)
+- [examples/basic](examples/basic)
+
+## 库 API
+
+### 最简
 
 ```go
-c, err := zhconv.New(zhconv.Options{})
+out := zhconv.ToSimplified("資料庫程式設計師")
+// 数据库程序员
+```
+
+### 共享实例（推荐高频调用）
+
+```go
+c := zhconv.Default() // sync.Once，进程内单例
+out := c.Convert("伺服器檔案已匯出")
+```
+
+### 自定义选项
+
+```go
+c, err := zhconv.New(zhconv.Options{
+	// DisablePhrases: true, // 仅单字映射
+})
 if err != nil {
 	panic(err)
 }
-out := c.Convert("資料庫")
+fmt.Println(c.Convert("螢幕解析度"))
 ```
 
-仅单字、禁用词组：
+### 字节接口
 
 ```go
-c, _ := zhconv.New(zhconv.Options{DisablePhrases: true})
+out := zhconv.ToSimplifiedBytes([]byte("繁體中文"))
 ```
 
-## 命令行试玩
+## 命令行
+
+```bash
+# 内置演示
+zhconv -demo
+
+# stdin -> stdout
+echo 軟體與網路連線 | zhconv
+
+# 文件
+zhconv -i in.txt -o out.txt
+```
+
+本地开发：
 
 ```bash
 go run ./cmd/zhconv -demo
-
-echo 軟體與網路 | go run ./cmd/zhconv
-go run ./cmd/zhconv -i in.txt -o out.txt
 ```
 
-## 设计
-
-```
-phrases trie (longest match)
-        ↓ miss
-character map (rune -> simplified)
-        ↓ miss
-original text
-```
-
-- 词表构建一次，查询热路径避免多余分配
-- `Default()` 使用 `sync.Once` 共享实例
-- API 面积极小：`ToSimplified` / `Converter.Convert`
-
-## 词表
-
-| 文件 | 说明 |
-|---|---|
-| `table/chars.tsv` | 繁→简 单字（含港台异体反向） |
-| `table/phrases.tsv` | 繁→简 词组（含台湾用语） |
-| `dict/NOTICE` | 上游许可说明 |
-
-## 地区覆盖现状
+## 地区覆盖
 
 | 类型 | 支持程度 |
 |---|---|
@@ -95,13 +123,61 @@ original text
 | `zh-TW`/`zh-HK` 作为输出目标 | ❌ 不做（只输出简体） |
 | 简体 → 繁体 | ❌ 不做 |
 
+## 设计摘要
+
+```
+phrases trie (longest match)
+        ↓ miss
+character map (rune -> simplified)
+        ↓ miss
+original text
+```
+
+- 词表构建一次，热路径低分配
+- `Default()` 使用 `sync.Once`
+- API 面积极小：`ToSimplified` / `Converter.Convert`
+
+详见 [docs/architecture.md](docs/architecture.md)。
+
+## 词表
+
+| 文件 | 说明 |
+|---|---|
+| `table/chars.tsv` | 繁→简 单字（含港台异体反向） |
+| `table/phrases.tsv` | 繁→简 词组（含台湾用语） |
+| `dict/NOTICE` | 上游许可说明 |
+
 ## 测试
 
 ```bash
 go test ./...
-go test -bench=BenchmarkToSimplified -benchmem ./...
+go test -bench=BenchmarkToSimplified -benchmem .
 ```
+
+## 本地构建多平台二进制
+
+```bash
+# Linux / macOS / Git Bash
+./scripts/build-release.sh v0.1.0
+
+# 产物在 dist/
+```
+
+## 发布
+
+推送语义化版本 tag 即可触发 GitHub Actions 构建并创建 Release：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+工作流：
+
+- CI：`.github/workflows/ci.yml`（测试 + vet）
+- Release：`.github/workflows/release.yml`（多平台打包 + checksums + GitHub Release）
 
 ## License
 
-Apache-2.0（词表遵循 OpenCC 的 Apache-2.0）
+Apache-2.0  
+词表遵循 OpenCC 的 Apache-2.0（见 `dict/NOTICE`）。
