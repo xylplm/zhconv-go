@@ -180,9 +180,9 @@ func TestCustomTables(t *testing.T) {
 			{From: "測", To: "测"},
 			{From: "試", To: "试"},
 			{From: "組", To: "组"},
-			{From: "", To: "x"},                       // ignored
-			{From: "坏", To: "坏"},                     // noop ignored
-			{From: string([]byte{0xff}), To: "x"},     // invalid ignored
+			{From: "", To: "x"},                   // ignored
+			{From: "坏", To: "坏"},                  // noop ignored
+			{From: string([]byte{0xff}), To: "x"}, // invalid ignored
 		},
 		Phrases: []table.Mapping{
 			{From: "測試詞", To: "测试词"},
@@ -213,11 +213,9 @@ func TestMatchLongestPhraseOverShorter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := c.Convert("軟體工程師"); got != "软件工程师" && got != "软件工程師" {
-		// 師 may stay traditional without char map; longest phrase must still win prefix.
-		if !strings.HasPrefix(got, "软件工程") {
-			t.Fatalf("longest phrase expected, got %q", got)
-		}
+	// Without char map, 師 stays traditional; longest phrase must still win.
+	if got := c.Convert("軟體工程師"); got != "软件工程師" {
+		t.Fatalf("longest phrase expected, got %q", got)
 	}
 	if got := c.Convert("軟體工程"); got != "软件工程" {
 		t.Fatalf("exact longest phrase: %q", got)
@@ -334,5 +332,27 @@ func BenchmarkToSimplifiedNoChange(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		_ = c.Convert(in)
+	}
+}
+
+func BenchmarkConvertBytes(b *testing.B) {
+	in := []byte(strings.Repeat("這是一段用於基準測試的繁體中文字幕，包含軟體、網路、資料庫、影片與訊息。", 20))
+	c := Default()
+	b.ReportAllocs()
+	b.SetBytes(int64(len(in)))
+	b.ResetTimer()
+	for b.Loop() {
+		_ = c.ConvertBytes(in)
+	}
+}
+
+func BenchmarkConvertBytesNoChange(b *testing.B) {
+	in := []byte(strings.Repeat("Hello 世界 software network database 12345 ", 40))
+	c := Default()
+	b.ReportAllocs()
+	b.SetBytes(int64(len(in)))
+	b.ResetTimer()
+	for b.Loop() {
+		_ = c.ConvertBytes(in)
 	}
 }

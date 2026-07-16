@@ -10,13 +10,3 @@ func bytesToStringRO(b []byte) string {
 	}
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }
-
-// stringToBytesCopy returns a newly allocated mutable copy of s.
-func stringToBytesCopy(s string) []byte {
-	if len(s) == 0 {
-		return nil
-	}
-	out := make([]byte, len(s))
-	copy(out, s)
-	return out
-}

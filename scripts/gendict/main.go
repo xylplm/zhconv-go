@@ -407,20 +407,26 @@ func httpGet(client *http.Client, url, accept string, retries int) ([]byte, erro
 		resp, err := client.Do(req)
 		if err != nil {
 			last = err
-			sleepBackoff(attempt)
+			if attempt < retries {
+				sleepBackoff(attempt)
+			}
 			continue
 		}
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 		_ = resp.Body.Close()
 		if readErr != nil {
 			last = readErr
-			sleepBackoff(attempt)
+			if attempt < retries {
+				sleepBackoff(attempt)
+			}
 			continue
 		}
 		// Retry rate-limit / transient 5xx.
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			last = fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
-			sleepBackoff(attempt)
+			if attempt < retries {
+				sleepBackoff(attempt)
+			}
 			continue
 		}
 		if resp.StatusCode != http.StatusOK {
@@ -435,7 +441,7 @@ func httpGet(client *http.Client, url, accept string, retries int) ([]byte, erro
 }
 
 func sleepBackoff(attempt int) {
-	// 200ms, 400ms, 800ms... capped roughly by attempt count.
+	// 200ms, 400ms, 800ms... capped.
 	d := time.Duration(200*(1<<(attempt-1))) * time.Millisecond
 	if d > 2*time.Second {
 		d = 2 * time.Second
@@ -450,8 +456,13 @@ func atomicWriteFile(path string, data []byte, mode os.FileMode) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	// Ensure cleanup on any failure path.
-	defer func() { _ = os.Remove(tmpName) }()
+	// Ensure cleanup on any failure path. Successful rename removes tmpName.
+	ok := false
+	defer func() {
+		if !ok {
+			_ = os.Remove(tmpName)
+		}
+	}()
 
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
@@ -461,12 +472,22 @@ func atomicWriteFile(path string, data []byte, mode os.FileMode) error {
 		_ = tmp.Close()
 		return err
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
+		return err
+	}
+	// Windows cannot rename over an existing file; remove destination first.
+	// On POSIX, Remove+Rename is still safe for our single-writer tooling path.
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	if err := os.Rename(tmpName, path); err != nil {
 		return err
 	}
+	ok = true
 	return nil
 }
 

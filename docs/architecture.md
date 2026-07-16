@@ -96,7 +96,10 @@ phrases map[rune][]phrase // 按首字分桶，桶内按词长降序
 ### 零分配快路径
 
 - 输入无需转换时：`Convert` 直接返回原字符串（0 alloc）
-- `ConvertBytes` 无变化时返回原 `[]byte`
+- `ConvertBytes` 无变化时返回原 `[]byte`（0 alloc）
+- 有转换时：`Convert` / `ConvertBytes` 共用 `convertToBytes` 核心，只构建**一块**输出缓冲
+  - `Convert`：`string(buf)` 一次
+  - `ConvertBytes`：直接返回 `buf`，无中间 string 二次拷贝
 
 ## 并发模型
 

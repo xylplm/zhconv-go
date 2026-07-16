@@ -10,5 +10,5 @@
 // Quick start:
 //
 //	fmt.Println(zhconv.ToSimplified("軟體與網路連線"))
-//	// 软件与网络连线
+//	// 软件与网络连接
 package zhconv

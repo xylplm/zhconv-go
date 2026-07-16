@@ -35,10 +35,10 @@ type Converter struct {
 // Options controls converter construction.
 type Options struct {
 	// Chars overrides the embedded character table when non-nil.
-	// The slice is treated as read-only.
+	// The slice is treated as read-only. An empty non-nil slice means "no chars".
 	Chars []table.Mapping
 	// Phrases overrides the embedded phrase table when non-nil.
-	// The slice is treated as read-only.
+	// The slice is treated as read-only. An empty non-nil slice means "no phrases".
 	Phrases []table.Mapping
 	// DisablePhrases skips phrase matching and only applies character mapping.
 	DisablePhrases bool
@@ -259,15 +259,39 @@ func (c *Converter) Convert(s string) string {
 	if c == nil || s == "" {
 		return s
 	}
+	buf, changed := c.convertToBytes(s)
+	if !changed {
+		return s
+	}
+	return string(buf)
+}
 
+// ConvertBytes converts traditional Chinese bytes to simplified Chinese.
+// When no change is required, the input slice is returned as-is (no allocation).
+// When a change occurs, a newly allocated slice is returned (single buffer, no intermediate string).
+// p must not be mutated during the call.
+func (c *Converter) ConvertBytes(p []byte) []byte {
+	if c == nil || len(p) == 0 {
+		return p
+	}
+	// Read-only string view over p; convert never mutates the input.
+	s := bytesToStringRO(p)
+	buf, changed := c.convertToBytes(s)
+	if !changed {
+		return p
+	}
+	return buf
+}
+
+// convertToBytes is the shared scan core.
+// changed=false keeps the caller's input; changed=true returns a fresh buffer.
+func (c *Converter) convertToBytes(s string) (buf []byte, changed bool) {
 	// Lazy builder: only allocate when the first replacement happens.
-	var buf []byte
-	started := false
 	i := 0
 	for i < len(s) {
 		// Fast path: ASCII never participates in t2s tables.
 		if b := s[i]; b < 0x80 {
-			if started {
+			if changed {
 				buf = append(buf, b)
 			}
 			i++
@@ -276,7 +300,7 @@ func (c *Converter) Convert(s string) string {
 
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if r == utf8.RuneError && size == 1 {
-			if started {
+			if changed {
 				buf = append(buf, s[i])
 			}
 			i++
@@ -286,11 +310,11 @@ func (c *Converter) Convert(s string) string {
 		// 1) Longest phrase starting with this rune.
 		if c.hasPhrase {
 			if to, nBytes := c.matchPhraseAt(s, i, r); nBytes > 0 {
-				if !started {
+				if !changed {
 					// Small headroom for rare multi-rune char expansions later.
 					buf = make([]byte, 0, len(s)+8)
 					buf = append(buf, s[:i]...)
-					started = true
+					changed = true
 				}
 				buf = append(buf, to...)
 				i += nBytes
@@ -300,10 +324,10 @@ func (c *Converter) Convert(s string) string {
 
 		// 2) Single-rune character map.
 		if repl, ok := c.char1[r]; ok {
-			if !started {
+			if !changed {
 				buf = make([]byte, 0, len(s)+8)
 				buf = append(buf, s[:i]...)
-				started = true
+				changed = true
 			}
 			buf = utf8.AppendRune(buf, repl)
 			i += size
@@ -311,10 +335,10 @@ func (c *Converter) Convert(s string) string {
 		}
 		if len(c.charN) > 0 {
 			if repl, ok := c.charN[r]; ok {
-				if !started {
+				if !changed {
 					buf = make([]byte, 0, len(s)+8)
 					buf = append(buf, s[:i]...)
-					started = true
+					changed = true
 				}
 				buf = append(buf, repl...)
 				i += size
@@ -323,15 +347,12 @@ func (c *Converter) Convert(s string) string {
 		}
 
 		// 3) Keep original.
-		if started {
+		if changed {
 			buf = append(buf, s[i:i+size]...)
 		}
 		i += size
 	}
-	if !started {
-		return s
-	}
-	return string(buf)
+	return buf, changed
 }
 
 // matchPhraseAt returns replacement and matched traditional byte length.
@@ -353,21 +374,4 @@ func (c *Converter) matchPhraseAt(s string, byteIndex int, first rune) (string, 
 		}
 	}
 	return "", 0
-}
-
-// ConvertBytes converts traditional Chinese bytes to simplified Chinese.
-// When no change is required, the input slice is returned as-is (no allocation).
-// p must not be mutated during the call.
-func (c *Converter) ConvertBytes(p []byte) []byte {
-	if c == nil || len(p) == 0 {
-		return p
-	}
-	// Read-only string view over p; Convert never mutates the input.
-	s := bytesToStringRO(p)
-	out := c.Convert(s)
-	// Unchanged path returns the original string header from Convert.
-	if out == s {
-		return p
-	}
-	return stringToBytesCopy(out)
 }
