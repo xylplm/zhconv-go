@@ -100,7 +100,7 @@ phrases map[rune][]phrase // 按首字分桶，桶内按词长降序
 - 输入无需转换时：`Convert` 直接返回原字符串（0 alloc）
 - `ConvertBytes` 无变化时返回原 `[]byte`（0 alloc）
 - 有转换时：`Convert` / `ConvertBytes` 共用 `convertToBytes` 核心，只构建**一块**输出缓冲
-  - `Convert`：`bytesToStringOwned(buf)`（1 alloc，避免 `string([]byte)` 二次拷贝）
+  - `Convert`：`bytesToString(buf)`（1 alloc，避免 `string([]byte)` 二次拷贝）
   - `ConvertBytes`：直接返回 `buf`（1 alloc）
 - 加载期 `simplifyWithChars` 只用字符表，**不走词组**（避免 New 过程中半成品词组污染目标归一）
 

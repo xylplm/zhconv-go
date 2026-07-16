@@ -12,7 +12,7 @@ Pinned upstream:
 - ref: master
 - commit: e67b9969109b3d62b5447a1427ec5d0e5fba5a35
 - commit_url: https://github.com/BYVoid/OpenCC/commit/e67b9969109b3d62b5447a1427ec5d0e5fba5a35
-- generated_at: 2026-07-16T10:54:10Z
+- generated_at: 2026-07-16T11:58:16Z
 
 Regenerate with:
   go run ./scripts/gendict

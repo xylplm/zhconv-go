@@ -27,11 +27,16 @@ go run ./scripts/gendict -ref v1.1.9
 ```text
 dict/chars.tsv
 dict/phrases.tsv
-dict/SOURCE.json      # 上游 commit / 计数 / 时间
+dict/SOURCE.json      # 上游 commit / 计数 / 时间（仅词表内容变化时更新）
 dict/NOTICE
 table/chars.tsv       # go:embed 副本，必须与 dict 一致
 table/phrases.tsv
 ```
+
+无变更行为：
+
+- TSV 映射内容与仓库内一致时，`gendict` **跳过写入**（含 `SOURCE.json`）
+- 避免仅因 `generated_at` 每周开空 PR
 
 ## GitHub Actions 自动 PR
 

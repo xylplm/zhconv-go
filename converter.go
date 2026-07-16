@@ -280,7 +280,7 @@ func (c *Converter) Convert(s string) string {
 		return s
 	}
 	// Zero-copy: buf is freshly allocated and not retained elsewhere.
-	return bytesToStringOwned(buf)
+	return bytesToString(buf)
 }
 
 // ConvertBytes converts traditional Chinese bytes to simplified Chinese.
@@ -292,7 +292,7 @@ func (c *Converter) ConvertBytes(p []byte) []byte {
 		return p
 	}
 	// Read-only string view over p; convert never mutates the input.
-	s := bytesToStringRO(p)
+	s := bytesToString(p)
 	buf, changed := c.convertToBytes(s)
 	if !changed {
 		return p

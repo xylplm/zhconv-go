@@ -71,9 +71,14 @@ jobs:
       - name: Detect changes
         id: changes
         run: |
-          if git diff --quiet -- dict table; then
+          # Only TSV mapping files decide whether a PR is needed.
+          # SOURCE.json/NOTICE are written only when TSV content changes (gendict).
+          if git diff --quiet -- \
+              dict/chars.tsv dict/phrases.tsv \
+              table/chars.tsv table/phrases.tsv; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No dictionary changes."
+            echo "No dictionary mapping changes."
+            git checkout -- dict table 2>/dev/null || true
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "Dictionary files changed:"
