@@ -194,20 +194,7 @@ flowchart TD
 | Go 里要较完整 OpenCC 能力 | longbridgeapp/opencc |
 | 多语言生态（Py/JS）统一规则 | zhconv-rs |
 
-## 7. 对 Media Saber 的匹配度
-
-| 需求 | zhconv-go | 完整转换引擎 |
-|---|---|---|
-| 字幕写入前繁转简 | ✅ 很贴 | 能做但偏重 |
-| 依赖少、可维护 | ✅ | 一般 |
-| 不引入 CGO | ✅ | OpenCC 原生不一定 |
-| 未来扩展 ASS 安全层 | ✅ 库边界清晰 | 也可，但封装更厚 |
-| 做通用翻译式转换中台 | 不足 | 更合适 |
-
-与后端现有字幕状态机、`gojianfan` 分工、写路径接入点的详细方案见  
-**[media-saber-integration.md](media-saber-integration.md)**。
-
-## 8. 诚实边界（避免过度承诺）
+## 7. 诚实边界（避免过度承诺）
 
 `zhconv-go` **不是**下列替代品：
 
@@ -223,7 +210,7 @@ flowchart TD
 - 接入快  
 - 行为可预期  
 
-## 9. 版本与基准说明
+## 8. 版本与基准说明
 
 - 文档对应版本：`v0.1.1+`
 - 词表：OpenCC 派生，见 `dict/NOTICE`

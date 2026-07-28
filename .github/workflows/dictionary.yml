@@ -95,7 +95,7 @@ jobs:
         run: |
           COMMIT=$(python3 -c 'import json; print(json.load(open("dict/SOURCE.json"))["commit"])')
           SHORT=${COMMIT:0:12}
-          COUNTS=$(python3 -c 'import json; c=json.load(open("dict/SOURCE.json"))["counts"]; print(f"chars={c.get(\"chars\",0)} phrases={c.get(\"phrases\",0)}")')
+          COUNTS=$(python3 -c 'import json; c=json.load(open("dict/SOURCE.json"))["counts"]; print("chars={} phrases={}".format(c.get("chars", 0), c.get("phrases", 0)))')
           GEN_AT=$(python3 -c 'import json; print(json.load(open("dict/SOURCE.json"))["generated_at"])')
           REF="${{ steps.ref.outputs.value }}"
           {
