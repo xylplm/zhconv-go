@@ -10,9 +10,9 @@ When an entry has multiple candidates, the first candidate is kept.
 
 Pinned upstream:
 - ref: master
-- commit: e67b9969109b3d62b5447a1427ec5d0e5fba5a35
-- commit_url: https://github.com/BYVoid/OpenCC/commit/e67b9969109b3d62b5447a1427ec5d0e5fba5a35
-- generated_at: 2026-07-16T11:58:16Z
+- commit: 2904aa4dd06df17c538fbeae9f1efa14e25bb4a5
+- commit_url: https://github.com/BYVoid/OpenCC/commit/2904aa4dd06df17c538fbeae9f1efa14e25bb4a5
+- generated_at: 2026-07-28T07:02:48Z
 
 Regenerate with:
   go run ./scripts/gendict
