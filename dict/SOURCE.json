@@ -1,19 +1,19 @@
 {
   "repo": "BYVoid/OpenCC",
   "ref": "master",
-  "commit": "5249273a3e5606852f088c9a8b23522145d94f78",
-  "commit_url": "https://github.com/BYVoid/OpenCC/commit/5249273a3e5606852f088c9a8b23522145d94f78",
-  "generated_at": "2026-08-10T04:58:09Z",
+  "commit": "26753884f1984add422f3b0249ccee8613deaff6",
+  "commit_url": "https://github.com/BYVoid/OpenCC/commit/26753884f1984add422f3b0249ccee8613deaff6",
+  "generated_at": "2026-08-31T09:52:50Z",
   "files_sha256_prefix": {
     "HKVariants.txt": "e5cd434530322458",
     "TSCharacters.txt": "737c21c66f55a419",
     "TSPhrases.txt": "362fa1b9a7d6edd0",
-    "TWPhrasesRev.txt": "f3b8c4083bc2a4f6",
+    "TWPhrasesRev.txt": "2c13969308cf4b92",
     "TWVariants.txt": "e187278e119c427c"
   },
   "counts": {
     "chars": 3231,
-    "phrases": 1112
+    "phrases": 1113
   },
   "notes": [
     "TSCharacters is the primary character map (first candidate kept).",
